@@ -163,6 +163,53 @@ The rest of the policy:
   Same rule as a census — see *"an issue's census is a floor"* — applied to
   the cells instead of the count.
 
+  **And searching `game.db` is not searching the compendium.** A sixth
+  case, 2026-11-24, and it is a different mistake from the five above:
+  the numbers were not wrong and no table was misread. `#1561` said the
+  superior implements *"the compendium lacks"*, Camille said to look
+  again, and they are there — 39 of them. Every search behind the claim
+  had run against `data/game.db`, which is the **built output**, so it
+  could only ever report what ETL already imports. The source is
+  `compendium.sqlite` in the repo root, 140 MB, git-ignored, and it is a
+  different schema: `Item`, `Power`, `Monster` with a `PlainTxt` column,
+  not `item`/`power` with a `spec`.
+
+  So **an absence in `game.db` is a claim about ETL, never about the
+  source.** The two readings have opposite owners — a missing importer is
+  work we can do, a missing page is not — and they are told apart by one
+  query against the other file.
+
+  **And the second guess was wrong too, which is the part worth keeping.**
+  Having found the rows, I wrote that *"there is no implement importer at
+  all"*. There is, and it is complete: `Category='Implement'` holds 580
+  rows, 412 of them in the heroic band, and **412 of 412 are in
+  `game.db`**. Camille's follow-up — *"are we not importing things from
+  the item table? Like there is other missing content?"* — is what forced
+  the measurement that found it:
+
+  ```
+  compendium `Item` rows                3,752
+    absent from game.db                 1,318   35%
+      LevelSort > 10                    1,273   deliberate, MAX_ITEM_LEVEL = 10
+      LevelSort == 0                       45
+      LevelSort 1..10                       0   nothing in band is lost
+  ```
+
+  So the importer loses **nothing it is meant to take**, and the real gap
+  is 45 rows, not a category and not 35%. They are excluded by
+  `WHERE (LevelSort BETWEEN 1 AND ?) OR Category = 'Equipment'` — which is
+  the **same hole `#876` already fixed once**, for `'Equipment'` only. Of
+  the 45: 39 superior implements filed under `Category='Weapon'` with no
+  `Damage` line (so the weapon importer rightly skips them), 4 table
+  placeholders that are not items at all, and 2 genuinely level-less
+  rows.
+
+  The lesson is therefore two-part. Opening the right file told me the
+  rows existed; it did **not** tell me why they were missing, and my first
+  explanation for that was as wrong as the original claim. A 35% absence
+  that is 97% deliberate reads exactly like a broken importer until the
+  exclusion is read. #1581.
+
 ### Labels
 
 Three orthogonal axes. Pick one from each that applies.
