@@ -255,11 +255,34 @@ def f799(c: Cast) -> None:
         "cf:rogue-scoundrel-f4", "1d6", on=c.me,
         when=lambda ctx: c.wielding("longsword"),
     )
+#: *"That distance + 2 squares."*
+_F370_FURTHER = 2
+
+
 @power("f370", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.shift_becomes_move()",))
+       reach=PERSONAL, target=SELF)
 def f370(c: Cast) -> None:
-    """Turns any shift a power grants into a longer walk. A shift is
-    taken inside the granting row's body; nothing intercepts one."""
+    """Turns any shift a power grants into a longer walk.
+
+    **"Nothing intercepts one" was the premise and it was wrong about
+    the layer.** A shift is indeed taken inside the granting row's body
+    -- and every one of them goes through `c.shift`, which is a single
+    door. So the interception is a read there rather than a facility
+    reaching into other rows' bodies.
+
+    `c.shift_becomes_move` is that read, and the clause is a **trade**
+    rather than a bonus: a shift ignores difficult terrain and draws no
+    opportunity attack, a walk does both, so the card buys ground with
+    safety. That is why it cannot be a silent substitution -- `c.shift`
+    offers it through `World.decide`, the same door the destination
+    already goes through.
+
+    **The headless default is to keep shifting**, because `decide` takes
+    `options[0]` with no decider installed and `False` is first. So
+    `replay`, `audit` and every fixture behave exactly as before -- 8 of
+    8 after the change -- and the trade is something a player reaches
+    for. #1568."""
+    c.shift_becomes_move(_F370_FURTHER, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f750", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

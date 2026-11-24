@@ -1704,6 +1704,35 @@ class Cast:
         who = self.me if on is None else on
         return build_choice(self.world, who, prefix)
 
+    def shift_becomes_move(
+        self,
+        plus: int = 2,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"When a power lets you shift, you can instead move that
+        distance + 2 squares."
+
+        A **trade**, not a bonus: a shift ignores difficult terrain and
+        draws no opportunity attack, and a walk does both. So the card
+        buys distance with safety and the choice has to be the mover's --
+        `c.shift` offers it through `World.decide`, which is the same
+        door the destination already goes through.
+
+        Laid on whoever shifts. `plus` is the printed extra distance.
+
+        A `Mods` key read in `c.shift`, which is the one door every shift
+        comes through, for the reason `_defence_raise` gives: read where
+        the thing happens rather than at `Mods.total`, which is asked for
+        every roll in the game. #1568.
+        """
+        return self.bonus(
+            self._SHIFT_AS_MOVE, plus, on=on if on is not None else self.me,
+            until=until, when=when, kind="untyped",
+        )
+
     def _this_attack(self) -> int:
         """The id every target of **this** use of the power shares.
 
@@ -7268,11 +7297,70 @@ class Cast:
                                             granted_by=self.me)
         if not routes:
             return False
+        # **The printed trade, offered before the destination is.**
+        # `f370` lets a shift be taken as a walk of the same distance +2,
+        # which buys ground at the cost of the shift's safety -- a walk
+        # provokes and pays for difficult terrain, a shift does neither.
+        # So this cannot be a silent substitution and cannot be a bonus;
+        # it is a choice, and `World.decide` is the door the destination
+        # already goes through.
+        #
+        # **`False` first, deliberately.** `decide` takes `options[0]`
+        # when no decider is installed, so every headless run -- `replay`,
+        # `audit`, a fixture -- keeps shifting exactly as it did and no
+        # baseline moves. The trade is something a player reaches for.
+        traded = self._extra_move_instead(mover)
+        if traded > 0:
+            walked = self._walk_instead(mover, printed + traded, share,
+                                        toward, away_from)
+            if walked is not None:
+                return walked
         options = self._nearest_first(list(routes), toward, away_from, mover)
         dest = self.world.decide(mover, "shift", options, f"{self.ref}: shift {squares_}")
         return shift(self.world, mover, dest, share=share,
                      stretched=self._stretch(mover, printed, dest),
                      path=routes.get(dest))
+
+    def _extra_move_instead(self, mover: int) -> int:
+        """How many extra squares this creature may trade a shift for.
+
+        `0` for everybody without `c.shift_becomes_move`, which is every
+        creature on every board but the one holding `f370` -- so the
+        cheap read comes before anything is offered.
+        """
+        from .components import Mods
+
+        held = self.world.get(mover, Mods)
+        if held is None or not held.items:
+            return 0
+        return held.total(self._SHIFT_AS_MOVE, {"actor": mover})
+
+    def _walk_instead(self, mover: int, far: int, share: bool,
+                      toward: int | None,
+                      away_from: int | None) -> bool | None:
+        """Take the shift as a walk of `far`, if the mover says so.
+
+        `None` when the trade was declined or there is nowhere to walk,
+        which leaves `c.shift` to shift as it always did. `kind="walk"`
+        on the search is the whole difference: it prices difficult
+        terrain and opens the opportunity windows a shift does not.
+        """
+        from .movement import walk
+
+        if not self.world.decide(
+            mover, "shift_becomes_move", [False, True],
+            f"{self.ref}: shift, or move {far} instead?",
+        ):
+            return None
+        routes = self.world.reachable_paths(mover, far, kind="walk",
+                                            share=share, by=self.ref,
+                                            granted_by=self.me)
+        if not routes:
+            return None
+        options = self._nearest_first(list(routes), toward, away_from, mover)
+        dest = self.world.decide(mover, "move", options,
+                                 f"{self.ref}: move {far}")
+        return walk(self.world, mover, routes[dest]) > 0
 
     def shift_as(
         self,
@@ -18959,6 +19047,12 @@ class Cast:
     #: Imported from the reader rather than spelled again here, so the two
     #: halves cannot drift.
     _EDGE_PRONE = EDGE_PRONE_WAIVED
+    #: Read by `c.shift` before it moves: how many EXTRA squares a shift
+    #: may be traded for, if the mover would rather walk. `f370` prints
+    #: *"when a power lets you shift, you can instead choose to move that
+    #: distance + 2 squares"* -- a trade of the shift's safety for
+    #: distance, since a walk provokes where a shift does not.
+    _SHIFT_AS_MOVE = "shift_becomes_move"
 
     def _defence_raise(self, key: str, kind: str, who: int) -> int:
         """How much to add to a defence bonus this caster's power grants.

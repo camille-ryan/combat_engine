@@ -180,6 +180,13 @@ CATEGORIES: dict[str, dict] = {
                 "altitude_limit", "flee", "hover", "jump", "move",
                 "moving_as", "overrun",
                 "ride", "rise", "run_at", "running_start", "shift",
+                # **Beside `shift` because it is a shift's own trade**,
+                # not a second way to move: `f370` lets a granted shift
+                # be taken as a walk of the same distance +2, buying
+                # ground with the shift's safety. An author holding a
+                # card that says "instead choose to move" should find it
+                # next to the thing it replaces.
+                "shift_becomes_move",
                 # Beside `teleport` because both put a creature in a
                 # square it is not next to, and apart from it because
                 # this one is a RETURN: it reads a square remembered

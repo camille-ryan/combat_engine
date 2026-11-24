@@ -136727,6 +136727,134 @@ def a_destruction_nothing_answers(out: Result) -> None:
     )
 
 
+def a_shift_traded_for_a_walk(out: Result) -> None:
+    """*"When a power lets you shift, you can instead choose to move that
+    distance + 2 squares."* -- `f370`.
+
+    A **trade**, not a bonus: a shift ignores difficult terrain and draws
+    no opportunity attack, a walk does both. So three things have to be
+    true at once and each would be wrong alone.
+
+    * **The default is to shift.** `World.decide` takes `options[0]` with
+      no decider installed and `False` is first, so every headless run
+      behaves as it did. Without this the change would move fixtures and
+      quietly make every shift in the game a walk.
+    * **Saying yes walks further**, by the printed +2.
+    * **And the walk is a WALK** -- `kind="walk"` on the search, so it
+      pays for difficult terrain where the shift would have crossed it
+      free. That is the cost the card is buying with, and asserting the
+      distance alone would miss it.
+
+    Then the row itself: `f370` is what lays the trade, and the arms
+    above pose it by hand. Emptying the row left them green until an arm
+    read the modifier off the board `audit.board` builds for it.
+
+    #1568.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Position
+    from combat_engine.engine.durations import When
+
+    PLUS = 2
+
+    asked: list[str] = []
+
+    def moved(*, trade: bool, say_yes: bool) -> int:
+        """Squares covered by a 1-square shift, with the trade on or off.
+
+        Also records every question the decider was asked: distance alone
+        cannot tell a declined trade from one taken to the nearest
+        square, which is the hole the consent arm below fills.
+        """
+        world, me, _ = _board("f419", 1)
+        rig = Cast(world=world, me=me, ref="drivers:trade")
+        if trade:
+            rig.shift_becomes_move(PLUS, on=me, until=When.ENCOUNTER)
+        start = world.need(me, Position).square
+        if say_yes:
+            # **Takes the trade AND then walks as far as it is offered.**
+            # `_nearest_first` sorts the destinations nearest-first, so a
+            # decider answering `options[0]` accepts the trade and then
+            # steps one square -- which is what the first draft of this
+            # arm did, reporting 1 and reading as a broken engine. A
+            # player buying distance picks the far end.
+            def chooser(actor, kind, options, prompt):  # noqa: ANN001, ANN202
+                asked.append(kind)
+                if kind == "shift_becomes_move":
+                    return True
+                if kind == "move":
+                    return max(options, key=lambda sq: max(
+                        abs(sq[0] - start[0]), abs(sq[1] - start[1])))
+                return options[0]
+
+            world.decider = chooser
+        was = world.need(me, Position).square
+        rig.shift(1, who=me)
+        now = world.need(me, Position).square
+        # **Chebyshev, not Manhattan.** A diagonal is one square in this
+        # game, so summing the legs reported a plain shift of 1 as 2 and
+        # the premise arm went red on a correct engine. The arm caught my
+        # metric rather than the code.
+        return max(abs(now[0] - was[0]), abs(now[1] - was[1]))
+
+    plain = moved(trade=False, say_yes=False)
+    out.that(
+        plain == 1,
+        "an ordinary shift of 1 moves 1 -- the premise the arms below"
+        " are measured against",
+        f"{plain} square(s)",
+    )
+    held = moved(trade=True, say_yes=False)
+    out.that(
+        held == plain,
+        "holding the trade and NOT taking it shifts exactly as before --"
+        " `decide` answers `options[0]` with no decider, and `False` is"
+        " first, which is what keeps every headless run and every"
+        " fixture unmoved",
+        f"{held} square(s), against {plain}",
+    )
+    took = moved(trade=True, say_yes=True)
+    out.that(
+        took > plain,
+        "and taking it covers more ground -- the printed `that distance"
+        " + 2`, bought at the cost of the shift's safety",
+        f"{took} square(s), against {plain}",
+    )
+
+    # **Consent is SOUGHT, which distance cannot show.** A decider
+    # answering `options[0]` accepts nothing and walks to the nearest
+    # square, so "moved 1" reads the same whether the trade was declined
+    # or taken badly -- and the plant that removes the question
+    # altogether passed until this arm existed. A silent substitution is
+    # exactly what this clause must not be.
+    out.that(
+        "shift_becomes_move" in asked,
+        "the mover is ASKED before its shift becomes a walk -- the trade"
+        " costs the shift's safety, so it cannot be taken on the"
+        " creature's behalf",
+        f"decider asked for {sorted(set(asked))}",
+    )
+    out.that(
+        asked.count("shift_becomes_move") == 1,
+        "and asked once per shift rather than once per candidate square,"
+        " which is what asking before the destinations are offered buys",
+        f"{asked.count('shift_becomes_move')} time(s), order {asked}",
+    )
+
+    # -- the row lays it --
+    world, me, _ = _board("f370", 1)
+    held_mods = world.get(me, Mods)
+    laid = [m for m in (held_mods.items if held_mods else ())
+            if getattr(m, "what", "") == Cast._SHIFT_AS_MOVE]
+    out.that(
+        bool(laid) and sum(getattr(m, "value", 0) for m in laid) == PLUS,
+        "`f370` itself lays the trade at the printed +2 -- without this"
+        " arm the three above pass on a row with an empty body, because"
+        " they lay it themselves",
+        f"{[getattr(m, 'value', None) for m in laid]}",
+    )
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -139905,6 +140033,11 @@ DRIVERS = {
                       "encounter and ending with the day"),
     "points_regained": (points_regained,
                         "a power point put back, and the cap that refuses one"),
+    "shift_traded": (
+        a_shift_traded_for_a_walk,
+        "a shift may be traded for a longer walk, and the headless"
+        " default is still to shift",
+    ),
     "silent_death": (
         a_destruction_nothing_answers,
         "a destruction nothing may answer: announced, but offered to no"
