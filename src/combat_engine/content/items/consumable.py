@@ -972,7 +972,7 @@ def i3283p1(c: Cast) -> None:
 
 @power("i3305p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(2), target=NO_TARGET,
-       dropped=("c.must_attack(on=, against=)",))
+       dropped=("c.must_leave(zone)",))
 def i3305p1(c: Cast) -> None:
     """The creature type is fixed when the scroll is made and carried by
     no column, so it is asked of the decider the way `_element` asks for a
@@ -1014,12 +1014,20 @@ def i3305p1(c: Cast) -> None:
     deliberately absent**: a shove may still put an affected creature
     inside, which is the line the printed word draws.
 
-    What is still missing is the card's **second** clause, and it is a
-    different family: *"must use its first action to leave the aura by
-    the shortest route"* is a compulsion, which is
-    `c.must_attack(on=, against=)`'s group -- five other rows wait on
-    that one. The marker names it now; it never did before, so this row
-    was under-marked rather than over. #1564."""
+    What is still missing is the card's **second** clause: *"must use its
+    first action to leave the aura by the shortest route possible, unless
+    no route exists."* It was never separately marked, so this row was
+    under-marked rather than over.
+
+    **`c.must_leave(zone)` and deliberately NOT
+    `c.must_attack(on=, against=)`, which is where I first put it.** That
+    symbol's five other rows all print a compulsion to *attack* -- "must
+    attack the nearest foe, charging when possible", "a melee attack on a
+    random creature within 5 squares". This clause compels a **move
+    away**, spends the creature's first action on it, and routes by the
+    shortest path. One symbol serving both needs could not go red or
+    green correctly for either, which is the mistake `CLAUDE.md` opens
+    on, and putting it there was mine for about ten minutes. #1564."""
     from combat_engine.engine.components import Stats
 
     kind = c.choose(list(_SCROLL_KINDS), "the scroll's creature type")
