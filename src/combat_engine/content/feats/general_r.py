@@ -169,7 +169,7 @@ R44 = ("p7441", "p7442", "p7443")
 #: names a class feature by ref: all **26** are undeclared, so the family
 #: is one gap and `cf:vampire-f0` is what resolves when somebody starts
 #: writing it.
-UNDECLARED_CLASS_FEATURE = ("cf:vampire-f0",)
+UNDECLARED_CLASS_FEATURE = ("cf:vampire-f1",)
 BERSERKER_FORM = ("cf:barbarian-berserker-f0",)
 # **Retired, twice over: `etl.build_sub_option()` and then
 # `chargen.feature_choice()`. There is no constant here any more because no
@@ -2552,8 +2552,34 @@ def f3625(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=UNDECLARED_CLASS_FEATURE,
        proficiency=("w:holy-symbol", "w:ki-focus"))
 def f3626(c: Cast) -> None:
-    """Three class features named in prose, with the surge pool they cost
-    named beside them. Nothing here is a thing a `Cast` can lay."""
+    """Grants three class features, less two of one's sub-clauses, and
+    reduces the surge pool.
+
+    **The marker named a ref the card never mentions.** It said
+    `cf:vampire-f0`; the card names `cf:vampire-f1`, `cf:vampire-f2` and
+    `cf:vampire-f3`, and `cf:vampire-f0` is a power grant that has nothing
+    to do with this feat. Re-pointed to `cf:vampire-f1`, which is the one of
+    the three that is undeclared.
+
+    **And *"nothing here is a thing a `Cast` can lay"* is false**, which
+    is why this is a row to write rather than a row to wait on. Of the
+    four printed clauses:
+
+    * the `cf:vampire-f2` benefit, less darkvision and necrotic
+      resistance -- **declared**;
+    * `cf:vampire-f1` -- **undeclared**, and its clause is a short
+      rest, so out of combat either way;
+    * `cf:vampire-f3` -- **declared**, and `c.regeneration` and
+      `c.regen_suppressed` are both there, the second being what its
+      radiant clause needs;
+    * reduce the class's granted surges to 2 -- `Surges.surges` and
+      `Surges.max_surges`.
+
+    Plus the proficiencies, which are already on this header.
+
+    So three of four are writable today and the row stays `todo=` only
+    because the body is still empty -- `dropped=` would claim it plays.
+    Writing it is #1577; the marker is what blocks the last clause."""
 
 
 @power("f3627", level=1, cls="", usage=ENCOUNTER, action=NONE,

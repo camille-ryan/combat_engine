@@ -329,12 +329,44 @@ def f445(c: Cast) -> None:
 
 
 @power("f443", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.race_components()",))
+       reach=PERSONAL, target=SELF, todo=("etl.item.requires_trait",))
 def f443(c: Cast) -> None:
-    """Scales a racial power's temporary hit points by how many of a
-    race's components the character carries. The power is a ref; the
-    components are a racial trait nothing models, and there is no race
-    on a character to carry them."""
+    """Scales `p2485`'s temporary hit points by how many `r28` components
+    the character carries.
+
+    **Both reasons this used to give were wrong, and the gap is a column
+    rather than a facility.** It said *"the components are a racial trait
+    nothing models, and there is no race on a character to carry them"*.
+
+    * The race **is** on the character. `query.race_of` reads the
+      `race:<ref>` that `Build.choices` carries, and its own docstring
+      records two other rows that had worked around the same false
+      premise.
+    * A component is **not** a racial trait. It is an ordinary magic
+      item. The printed category page says so: components *"are not worn
+      or carried; instead, they are either attached to or embedded in"*
+      the creature, and *"[l]ike normal items, [they] have categories,
+      such as armor, weapons, implements, clothing, rings, and wondrous
+      items, and they occupy [its] item slots."* All 15 in the
+      compendium print the same `Requirement:` line naming `rt:r28-t0`.
+    * And `Gear.worn` already holds every worn item **by ref** --
+      `Magic.ref`, keyed by slot -- so counting them needs no new
+      reader. `equipment.equip`'s own comment is explicit that `worn`
+      records *every* magic item on the creature.
+
+    So what is missing is the one fact nothing parses: **which items
+    carry a racial-trait Requirement, and which trait.** It lives in
+    `item.spec` prose, there is no column for it, and that is an ETL
+    job -- hence the re-pointed symbol. A hand-written set of the 15
+    refs would work and is deliberately not taken: the same column
+    fixes a live chargen bug (`treasure` deals these items to any race
+    at all, measured at 23 of 420 kits), so one column serves two
+    readers and a literal here would serve one.
+
+    **The clause is reachable, measured rather than assumed.** 8 of the
+    15 components sit in `treasure`'s own pool -- 3 `ac`, 3
+    `defences`, 2 `attack_damage` -- so a dealt character really does
+    end a deal wearing one. #1575, #1576."""
 
 
 @power("f444", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
