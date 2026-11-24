@@ -3801,7 +3801,8 @@ def f2865(c: Cast) -> None:
 
 
 @power("f2624", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.proficiency(choice=)",))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.SUPERIOR_IMPLEMENTS",))
 def f2624(c: Cast) -> None:
     """A superior implement, and **which one is the character's choice** -- that is
     the whole of what is missing.
@@ -3813,8 +3814,31 @@ def f2624(c: Cast) -> None:
     says it may be taken more than once for a different implement each time, so the
     grant is a *selection* among a category rather than a list.
 
-    Nothing in `chargen` records a per-feat choice today, which is the same absence
-    `c.race_option()` names for a racial power."""
+    **Both of those readings are wrong, and the gap is a layer further
+    out.** The sentence that stood here said *"nothing in `chargen`
+    records a per-feat choice today"*, and `BUILD_OPTIONS` plus
+    `c.chosen_options` is exactly that record -- `option:<feat>:<pick>`
+    on `Build.choices` -- and that dict's own note says its values may
+    be *"kind words rather than refs"*, so a pick that is not a row is
+    already allowed. The choice machinery is not what is missing.
+
+    **The pool is.** There are no superior implements in this tree to
+    choose among: `IMPLEMENTS` holds the eight base types and nothing
+    else, and the compendium has none -- 580 `Implement` items, every
+    one of them magic, none mundane, and the printed phrase appears in
+    exactly one row of the whole database, which is this feat.
+
+    **And it is NOT `defect=`, which the compendium search alone would
+    have argued for.** The page has the table: `resources/Players
+    Handbook 3.pdf` page 196, seven type groups each with Price, Weight
+    and Properties, and the page names this feat as what unlocks them.
+    Calling a source absent off one empty query is the `#1021` mistake;
+    the positive control here is that the same search *did* find the
+    phrase in the one place it exists.
+
+    So the symbol is the table, and filling it is a piece of work rather
+    than a parameter: roughly 28 entries across seven types, plus the
+    printed properties they grant. Asked rather than started. #1561."""
 
 
 @power("f2783", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
