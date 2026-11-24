@@ -118,6 +118,11 @@ from combat_engine.engine.query import (
 )
 from combat_engine.engine.query import squares as squares_of
 
+#: The racial power `f3568` shares one encounter's use with -- the card
+#: names it beside the one the feat grants: *"you can use either that
+#: power or p8278, not both"*.
+SECOND_WIND_LIKE = "p8278"
+
 #: The thirteen racial powers of `r33`, one per elemental
 #: manifestation. A character takes one of them.
 R33 = (
@@ -798,44 +803,61 @@ def f3567(c: Cast) -> None:
 
 
 @power("f3568", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("chargen.Character.race2_power",))
+       reach=PERSONAL, target=SELF)
 def f3568(c: Cast) -> None:
     """A second race's power, chosen at build time, and then a shared
     once-an-encounter budget with `p8278`.
 
-    **Half of what this waited on is built, so the marker moved rather
-    than the row landing.** #1029. The note said *"nothing in
-    `Build.choices` records either"* of two things, and one of them now
-    is: `Character.race2` holds the race `rt:r47-t1` picked, `spawn`
-    draws one for a revenant and only a revenant, and `Build.choices`
-    carries it as `race2:<ref>`.
-
-    What is left is the card's parenthetical:
+    **Both halves are recorded now.** `#1029` built the first --
+    `Character.race2` holds the race `rt:r47-t1` picked and
+    `Build.choices` carries `race2:<ref>` -- and the marker moved to the
+    card's parenthetical rather than the row landing:
 
         "(if that race has more than one racial power, choose one of the
          powers, and you gain only that one)"
 
-    Nothing records **which** power was taken. Measured over the 46
-    dealable races:
+    `Character.race2_power` is that second decision, drawn beside the
+    race and out of the same stream, because it is conditional on the
+    race rather than independent of it. Over the 46 races `deal_race`
+    draws from, 39 print exactly one racial power so the choice is
+    forced, 6 print more than one, and `r41` prints none -- which is why
+    an empty pick returns rather than raising. A revenant whose second
+    race has no racial power gains nothing, which is what the card says.
 
-        exactly one racial power   39      the choice is forced
-        more than one              6       r1 r14 r16 r33 r44 r61
-        none at all                1       r41
+    **And `query.build_choice` is how a row reads it**, which is the
+    piece that was missing from all of this. `Build.choices` held
+    `race2:` and `multiclass:` *specifically* so this row and `f1120`
+    could read them -- the comment beside each says so -- and nothing
+    could read a prefix, only confirm a value it already knew. So the
+    key existed, the value existed, and the question was unaskable.
 
-    So the pick is only a question for 6 of 46, and `RaceLine.one_of`
-    already names the options for some of them -- but a row cannot be
-    written for 39 races and left guessing for 6, which is why this keeps
-    a marker rather than landing with a note.
+    The shared budget is `c.forbid` rather than `c.expend_row`, which the
+    old note named. The printed sentence is *"you can use either that
+    power or p8278, not both"*: using one must take the OTHER away, and
+    spending is the wrong verb for that -- `expend_row` would charge the
+    card the character did not use. `once=` spends the hold on the first
+    use, which is the whole of "during each encounter".
 
     **A symbol of its own and deliberately not `chargen.power_choice()`**
     (`#1112`'s, 9 rows): that one records a sub-choice a *feat* offers,
     this one a sub-choice a *race* offers, and one symbol serving two
-    needs is the mistake `CLAUDE.md` opens on -- twelve rows reported
-    ready when a third of it landed.
+    needs is the mistake `CLAUDE.md` opens on."""
+    pick = c.build_choice("race2_power")
+    if not pick:
+        return
+    me = c.me
+    c.grant_row(pick, on=me, until=When.ENCOUNTER)
 
-    The shared budget is unchanged and still sayable the moment the ref
-    exists: `c.expend_row` spends the other end."""
+    def spent(ev: PowerUsed) -> None:
+        if ev.actor != me:
+            return
+        if ev.power == pick:
+            c.forbid(SECOND_WIND_LIKE, on=me, until=When.ENCOUNTER)
+        elif ev.power == SECOND_WIND_LIKE:
+            c.forbid(pick, on=me, until=When.ENCOUNTER)
+
+    c.watch(PowerUsed, spent, until=When.ENCOUNTER, on=me, label=c.ref,
+            once=True)
 
 
 # -- the dim light family ---------------------------------------------------

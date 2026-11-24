@@ -2145,6 +2145,54 @@ class RaceLine:
         taken = [p for p in chosen if p in self.powers]
         return [*kept, *self._manifestation_for(taken), *taken]
 
+    def one_power(self, pick: Random | None = None) -> str:
+        """The **one** racial power a character of this race carries.
+
+        `granted` above answers the whole question -- traits and powers
+        together, with a "choose one" fork resolved -- and one card needs
+        only the power half, for a race the character is **not**:
+        `f3568`, *"you gain the racial power of the race you chose with
+        your rt:r47-t1 racial feature (if that race has more than one
+        racial power, choose one of the powers, and you gain only that
+        one)"*.
+
+        The parenthetical is what makes this its own method. Measured over
+        the 46 races with no `parent`, which is the set `deal_race` draws
+        from and so the set `race2` can hold: 39 print exactly one racial
+        power, 6 print more than one (`r1`, `r14`, `r16`, `r33`, `r44`,
+        `r61`) and one prints none (`r41`). So the choice is real for 6,
+        forced for 39, and `""` for the one -- and `""` is a card outcome
+        rather than a failure, since a race with no racial power grants
+        nothing to gain.
+
+        Over all **55** entries it is 7, because the variant `r68` prints
+        two as well. Said because this method does not check for a parent
+        and a caller handing it a variant gets a real answer; it is the
+        *dealer* that keeps the draw to the 46.
+
+        **Off the declared powers and deliberately NOT narrowed by
+        `one_of` first, which the first draft did.** That draft preferred
+        the race's own printed fork on the reasoning that this card's
+        parenthetical should not second-guess it -- and the branch is
+        **dead**: measured over all 55 races, there is not one where
+        `one_of` names a strict subset or a different order of the
+        declared powers, so `forked or written` was `written` every time.
+        Found by planting it and watching every arm stay green. If a race
+        ever forks *within* its powers, this is where that goes, and
+        `granted` is the method that already resolves such a fork.
+
+        `pick=None` takes the first, which is what every `granted` caller
+        without a `Random` already gets.
+        """
+        from combat_engine.engine.dsl import REGISTRY
+
+        options = [p for p in self.powers if p in REGISTRY]
+        if not options:
+            return ""
+        if pick is None or len(options) == 1:
+            return options[0]
+        return str(pick.sample(options, 1)[0])
+
     def _manifestation_for(self, chosen: list[str]) -> list[str]:
         """The sub-option trait that goes with the power picked, if any.
 
@@ -3231,6 +3279,24 @@ class Character:
     #: Empty for every character but a revenant, and empty is what every
     #: reader already answers for.
     race2: str = ""
+    #: **Which** racial power of `race2` was taken, or `""`.
+    #:
+    #: `race2` alone is not enough for the card that asked for it.
+    #: `f3568` prints *"you gain the racial power of the race you chose
+    #: ... (if that race has more than one racial power, choose one of
+    #: the powers, and you gain only that one)"*, and the parenthetical
+    #: is a second decision: 6 of the 46 drawable races print more than
+    #: one. So the feat's marker moved to this field rather than the row
+    #: landing, and `#1029`'s note said plainly that *"nothing records
+    #: which power was taken"*.
+    #:
+    #: Drawn beside `race2` and from the same stream, because it is the
+    #: second half of one decision and a stream of its own would make the
+    #: pick move whenever anything else was added. `""` for every
+    #: character but a revenant, and `""` for a revenant whose second
+    #: race prints no racial power -- which `r41` does, so that is a real
+    #: outcome and not a hole.
+    race2_power: str = ""
     #: The class this character multiclassed **into**, or `""`. `#1161`.
     #:
     #: **One fact, not a model of multiclassing.** Four rows are blocked
@@ -3397,6 +3463,15 @@ class Character:
         # deal and a `Build` does.
         if self.race2:
             out.add(f"race2:{self.race2}")
+        # **And which of its powers**, under its own key again, because
+        # `f3568`'s parenthetical is a second decision and the race alone
+        # does not answer it for the 6 races that print more than one.
+        # `query.build_choice` is what reads a prefix like these three
+        # back -- until it existed, every key here could only be
+        # confirmed by a reader that already knew the value, which is
+        # exactly what this row and `f1120` cannot do.
+        if self.race2_power:
+            out.add(f"race2_power:{self.race2_power}")
         # **The multiclass, under its own key**, for `race2`'s reason one
         # field over: a reader asking "is this character a rogue" and one
         # asking "which class did it multiclass into" are different
@@ -8758,15 +8833,19 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
     # out, which is the hazard `_trained_skills` records about a pinned
     # set.
     if DEAL_RACES and who.race == SECOND_RACE_FROM and not who.race2:
-        who = replace(
-            who,
-            race2=deal_race(
-                Random(f"{world.rng.seed}:{who.race}:second-race"),
-                who.cls,
-                build,
-                other_than=who.race,
-            ),
-        )
+        second = Random(f"{world.rng.seed}:{who.race}:second-race")
+        drew = deal_race(second, who.cls, build, other_than=who.race)
+        # **The power pick comes out of the SAME stream**, and after the
+        # race, because it is the second half of one printed decision --
+        # `f3568`'s *"if that race has more than one racial power, choose
+        # one"*. A stream of its own would be the usual arrangement here
+        # and is wrong for this one: the pick is not independent of the
+        # race, it is conditional on it, and 39 of the 46 races make it no
+        # choice at all. Drawing from `second` after `deal_race` has
+        # finished with it spends values only for the races where there is
+        # something to choose.
+        picked = RACES[drew].one_power(second) if drew in RACES else ""
+        who = replace(who, race2=drew, race2_power=picked)
     # Its own stream, like the race's above and for the same reason: adding
     # this draw must not move the dice every other decision reads. `#454`.
     if DEAL_DEITY and not who.worships:

@@ -17,6 +17,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.allies(world: 'World', eid: 'int', *, companions: 'bool' = False) -> 'list[int]'`
   - Allies never include the creature itself, nor anybody's companion.
+- `query.build_choice(world: 'World', eid: 'int', prefix: 'str') -> 'str'`
+  - **Which** of something a character was dealt, where `on_build` asks
 - `query.combatants(world: 'World') -> 'list[int]'`
   - The narrower question: who takes turns and decides the fight.
 - `query.conscious(world: 'World', eid: 'int') -> 'bool'`

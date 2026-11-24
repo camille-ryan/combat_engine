@@ -793,9 +793,15 @@ CATEGORIES: dict[str, dict] = {
             # more general: it is the same question -- what did the *build*
             # settle -- asked of a sub-choice a card printed rather than of
             # the weapon in hand. #758.
+            # `c.build_choice` goes beside `c.build` because it is the
+            # same question asked the other way round: `build` confirms a
+            # value, `build_choice` returns one. Three of `Build.choices`'
+            # entries are `key:value` pairs -- `race:`, `race2:` and
+            # `multiclass:` -- and two of them were added so a row could
+            # read them, which nothing could do until this existed.
             ("state and identity", [
-                "bloodied", "build", "chosen_option", "chosen_options",
-                "chosen_weapons",
+                "bloodied", "build", "build_choice", "chosen_option",
+                "chosen_options", "chosen_weapons",
                 # `set_build` is the writer for the reader beside it: six
                 # feats stand a character on a build leg chargen did not
                 # deal. Placed here rather than under choices, because the
@@ -1466,6 +1472,12 @@ READERS: dict[str, list[str]] = {
         "is_minion", "is_trap", "kind_waived", "kinds_of", "level_term",
         "living",
         "on_build",
+        # `build_choice` beside `on_build` for the obvious reason: same
+        # subject, opposite direction. `on_build` confirms a leg the
+        # caller names, `build_choice` returns the value under a
+        # `key:value` entry -- which is the only way a row can learn
+        # which second race or which multiclass a character was dealt.
+        "build_choice",
         "printed_kinds",
         # `is_summoned` is here with `race_of` and `feats_of` for the same
         # reason the comment above gives: it answers *what this creature

@@ -1678,6 +1678,29 @@ class Cast:
         who = self.me if on is None else on
         return on_build(self.world, who, choice)
 
+    def build_choice(self, prefix: str, *, on: int | None = None) -> str:
+        """**Which** one, where `c.build` asks whether it was a named one.
+
+        `c.build("race2:r3")` can only confirm a ref the row already
+        knows. Three of `Build.choices`' entries are `key:value` pairs --
+        `race:`, `race2:` and `multiclass:` -- and two of them exist
+        *specifically* so a row can learn the value mid-fight, which is
+        what `Character.choices` says in the comment beside each. Neither
+        row could, because nothing read a prefix.
+
+        Defaults to the caster, as `c.build` does and for the same
+        reason: which race a revenant chose is a fact about whoever is
+        using the power.
+
+        One line over `query.build_choice`, so a header gate can ask the
+        same question -- `c.build`'s own arrangement, and the trap it
+        records.
+        """
+        from .query import build_choice
+
+        who = self.me if on is None else on
+        return build_choice(self.world, who, prefix)
+
     def credit(self, ref: str) -> Any:
         """Everything laid inside this block is `ref`'s doing, not this row's.
 

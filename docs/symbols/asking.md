@@ -173,6 +173,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Is this creature bloodied -- by its hit points, or by a card.
 - `c.build(self, choice: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Did this character take that build? `c.build("infernal")`.
+- `c.build_choice(self, prefix: 'str', *, on: 'int | None' = None) -> 'str'`
+  - **Which** one, where `c.build` asks whether it was a named one.
 - `c.by_attack(self, *, ev: 'Any' = None) -> 'bool'`
   - Was an attack behind the blow being announced?
 - `c.chosen_option(self, ref: 'str', *, on: 'int | None' = None) -> 'str | None'`

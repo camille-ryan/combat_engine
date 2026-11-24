@@ -135988,6 +135988,180 @@ def a_borrowed_power_marks_what_it_hits(out: Result) -> None:
              f"{pick2!r} marked={marked2}")
 
 
+def a_second_races_power_shares_one_use(out: Result) -> None:
+    """"You gain the racial power of the race you chose with your
+    rt:r47-t1 racial feature (if that race has more than one racial
+    power, choose one of the powers, and you gain only that one). During
+    each encounter, you can use either that power or p8278, not both."
+
+    `f3568`. `#1029` recorded the race and the marker moved to the
+    parenthetical; `Character.race2_power` is that second decision and
+    `query.build_choice` is what lets a row read either of them.
+
+    **The key existed and the question was unaskable**, which is the
+    shape worth naming: `Build.choices` has carried `race2:<ref>` and
+    `multiclass:<ref>` specifically so this row and `f1120` could read
+    them -- both comments say so -- and the only reader was
+    `on_build`, which confirms a value the caller already knows. So a row
+    that had to *learn* the value could not, and two feats sat marked
+    beside a field holding exactly what they wanted.
+
+    The arms are the two halves of the card and then the cases that stop
+    them being vacuous. "Either, not both" needs both directions: a row
+    forbidding `p8278` on any use at all passes a one-directional test,
+    and so does one that forbids nothing when the character has no pick.
+
+    The `one_power` census is asserted rather than quoted, because the
+    row's own docstring rests on it -- 39 forced, 6 a real choice, 1
+    none -- and `r41` printing no racial power is the branch that makes
+    an empty pick a card outcome instead of a hole.
+
+    Planted five ways across all three layers, and **three of the five
+    taught something**:
+
+    | the plant | |
+    |---|---|
+    | forbids in one direction only | 1 arm red |
+    | forbids the row that was used | 2 arms red |
+    | no early return, so a pickless row bars the shared card | red once the arm moved |
+    | `one_power` answers a ref no row carries | red once a guard was added |
+    | `build_choice` ignores the prefix | every arm red |
+
+    The pickless plant first passed because the arm read the **pick**
+    back, and the pick is exactly what such a row would be barring; it
+    asks about the shared card now, which is the one card a pickless row
+    could name. And the bad-ref plant first **crashed** this rule on
+    `REGISTRY[pick]` rather than reddening anything, so the pick is
+    asserted to be declared before anything subscripts with it -- a
+    crash names a line in this file where a red names the broken claim.
+
+    A sixth plant is recorded in `one_power`'s own docstring and found
+    **dead code**: preferring `one_of` over the declared powers changed
+    no race's answer, in any of 55, so that branch is gone.
+    """
+    from random import Random
+
+    from audit import board as posed
+    from combat_engine import chargen
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import PowerUsed
+
+    SHARED = "p8278"
+
+    def staged() -> tuple[Any, int, Cast, str]:
+        world, me, _start = posed("f3568", 1)
+        rig = Cast(world=world, me=me, ref="drivers", target=me)
+        return world, me, rig, rig.build_choice("race2_power")
+
+    world, me, rig, pick = staged()
+    out.that(bool(rig.build_choice("race2")) and bool(pick),
+             "the posed revenant's second race AND which of its powers"
+             " were both recorded, and a row can read each -- the second"
+             " is the field this row's marker named and the reader is"
+             " what neither key had",
+             f"race2={rig.build_choice('race2')!r} power={pick!r}")
+    if not pick:
+        return
+    known = world.need(me, Powers)
+    # **Asserted before anything subscripts `REGISTRY` with it.** A plant
+    # making `one_power` answer a ref no row carries crashed this rule on
+    # `REGISTRY[pick]` rather than reddening an arm, which is a worse
+    # outcome than a failure: a crash names a line in this file where a
+    # red names the broken claim.
+    out.that(pick in REGISTRY,
+             "the recorded pick is a DECLARED row, so the arms below can"
+             " ask the rules kernel about it",
+             f"{pick!r} in REGISTRY = {pick in REGISTRY}")
+    if pick not in REGISTRY:
+        return
+    out.that(pick in known.known and SHARED in known.known,
+             "it holds the granted power and the one the card shares a"
+             " use with, so the two arms below are about a character that"
+             " could use either",
+             f"pick held={pick in known.known} {SHARED} held="
+             f"{SHARED in known.known}")
+
+    def after(swung: str) -> tuple[bool, bool]:
+        """Use `swung`; can each of the two still be used?
+
+        **`[0]`, and the first draft of this rule did not have it.**
+        `dsl.usable` returns `(ok, why)`, so `bool(usable(...))` is the
+        truthiness of a two-tuple and is True however the row behaves.
+        Both of the arms below read True and the row was working: the
+        tell was the `neither forbids itself` arm passing at the same
+        time, which cannot be true at once with the other two.
+        """
+        w, who, _rig, mine = staged()
+        w.bus.emit(PowerUsed(actor=who, power=swung, targets=[who]))
+        return (dsl.usable(w, who, REGISTRY[mine])[0],
+                dsl.usable(w, who, REGISTRY[SHARED])[0])
+
+    own_after_own, shared_after_own = after(pick)
+    out.that(not shared_after_own,
+             "using the granted power takes the OTHER one away for the"
+             " encounter -- the printed `either ... not both`",
+             f"after using {pick}: {SHARED} usable={shared_after_own}")
+    own_after_shared, shared_after_shared = after(SHARED)
+    out.that(not own_after_shared,
+             "and it reads the same way round: using the shared power"
+             " takes the granted one away. A one-directional test is"
+             " passed by a row that forbids on any use at all",
+             f"after using {SHARED}: {pick} usable={own_after_shared}")
+    out.that(own_after_own and shared_after_shared,
+             "neither use forbids ITSELF, which is the other way this"
+             " could be wrong: the card spends one of the two, not the"
+             " one that was used",
+             f"{pick} after itself={own_after_own};"
+             f" {SHARED} after itself={shared_after_shared}")
+
+    # -- the character with no pick, which is every non-revenant --
+    w2, me2, _r2, _p2 = staged()
+    held2 = w2.need(me2, Powers)
+    build = w2.need(me2, Build)
+    for entry in [c for c in build.choices if c.startswith("race2_power:")]:
+        build.choices.discard(entry)
+    REGISTRY["f3568"].body(Cast(world=w2, me=me2, ref="f3568", target=me2))
+    w2.bus.emit(PowerUsed(actor=me2, power=SHARED, targets=[me2]))
+    # **Asserted on the SHARED power and not on the pick**, because the
+    # pick is what was just taken away: a row that skipped its early
+    # return would have nothing to forbid on behalf of, and the thing
+    # it would wrongly bar is the one card it can name.
+    out.that(dsl.usable(w2, me2, REGISTRY[SHARED])[0],
+             "a character with no recorded pick forbids nothing: the row"
+             " returns on its first line rather than taking a power away"
+             " on behalf of one it cannot name",
+             f"{SHARED} usable={dsl.usable(w2, me2, REGISTRY[SHARED])}"
+             f" (known {len(held2.known)} rows)")
+
+    # -- the census the row's docstring rests on --
+    base = {r: line for r, line in chargen.RACES.items()
+            if not getattr(line, "parent", "")}
+    counted: dict[int, list[str]] = {}
+    for ref, line in base.items():
+        n = len([p for p in line.powers if p in REGISTRY])
+        counted.setdefault(min(n, 2), []).append(ref)
+    out.that(len(base) == 46 and len(counted.get(1, [])) == 39
+             and len(counted.get(2, [])) == 6 and counted.get(0) == ["r41"],
+             "the printed split the row is written against: of 46 races"
+             " with no parent, 39 print one racial power so the choice is"
+             " forced, 6 print more, and exactly one prints none",
+             f"46? {len(base)}; one={len(counted.get(1, []))}"
+             f" more={len(counted.get(2, []))} none={counted.get(0)}")
+    out.that(chargen.RACES["r41"].one_power() == "",
+             "and that one answers `` rather than raising, which is why"
+             " an empty pick is a card outcome and not a hole",
+             f"{chargen.RACES['r41'].one_power()!r}")
+    many = sorted(counted.get(2, []))
+    chosen = {r: chargen.RACES[r].one_power(Random(4)) for r in many}
+    out.that(all(ref in chargen.RACES[r].powers for r, ref in chosen.items()),
+             "and for every race that really offers a choice the pick is"
+             " one of THAT race's own powers",
+             f"{chosen}")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -138048,6 +138222,11 @@ DRIVERS = {
         forced_into_hindering_terrain,
         "forced movement into hindering terrain offers a save, and a"
         " success lands the creature prone",
+    ),
+    "race2_power": (
+        a_second_races_power_shares_one_use,
+        "a revenant's second race grants one of its racial powers, and it"
+        " shares one encounter's use with the racial power it is beside",
     ),
     "borrowed_mark": (
         a_borrowed_power_marks_what_it_hits,

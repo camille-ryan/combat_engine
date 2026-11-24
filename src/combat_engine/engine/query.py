@@ -2066,6 +2066,48 @@ def on_build(world: World, eid: int, choice: str) -> bool:
     return held is not None and want in held.choices
 
 
+def build_choice(world: World, eid: int, prefix: str) -> str:
+    """**Which** of something a character was dealt, where `on_build` asks
+    whether it was dealt a named one.
+
+    `Build.choices` is a set of words, and three of them are `key:value`
+    pairs rather than plain legs -- `race:`, `race2:` and `multiclass:`.
+    `on_build` can only confirm a value somebody already knows, so a row
+    that has to *learn* the value had no way to ask. Both of the pairs
+    added for that purpose say so in `Character.choices`' own comments:
+
+        Carried at all because `f3568` has to read it from the board
+        Carried at all because the fact has to reach the board: `f1120`
+        rolls Charisma for "any attack power gained through a multiclass
+        feat"
+
+    -- and neither row could, because nothing read a prefix. Written here
+    beside `on_build` rather than on `Cast` for `on_build`'s own reason: a
+    header gate must be able to give the same answer as a body.
+
+    `""` when the character has no such entry, which is almost every
+    character for every one of these keys. Takes the prefix with or
+    without its colon.
+
+    **Only `Build.choices` and deliberately not `c.set_build`'s effects.**
+    Those carry a bare leg word, so there is no value to parse out of one,
+    and a row laying `build:race2:rX` to rewrite which second race a
+    revenant chose is not a thing any card does. If one ever does, this is
+    where it goes, and the two traps `on_build` records about ordering
+    apply.
+    """
+    key = prefix if prefix.endswith(":") else f"{prefix}:"
+    held = world.get(eid, Build)
+    if held is None:
+        return ""
+    found = sorted(c[len(key):] for c in held.choices if c.startswith(key))
+    # **Sorted and first, rather than raising on two.** A second entry
+    # under one key is a chargen fault rather than something a row can do
+    # anything about, and a row in the middle of a fight is the wrong
+    # place to find out. Sorted so the answer is at least stable.
+    return found[0] if found else ""
+
+
 def kinds_of(
     world: World, eid: int, *, friendly: bool = False
 ) -> frozenset[str]:
