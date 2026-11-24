@@ -53,6 +53,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.racial import vs_bloodied
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -2215,6 +2216,17 @@ def i2093p1(c: Cast) -> None:
         c.grant_attack(c.me, on=c.target, ref="p1530")
 
 
+#: The race whose trait this rod raises, by ref, and by how much.
+#:
+#: The card says the trait's bonus *"increases by 1"*, so this is the
+#: increase and not a total -- the trait keeps printing its own 1 and the
+#: two add, which is why this is laid `kind="item"` where the trait's is
+#: `kind="racial"`. A total would have to be kept in step with the
+#: trait's number by hand. #1543.
+_I2301_RACE = "r8"
+_I2301_RAISE = 1
+
+
 @power(
     "i2301x1",
     level=10,
@@ -2222,13 +2234,47 @@ def i2093p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.racial_row()",),
+    dropped=("resolve.attack(implement)",),
 )
 def i2301x1(c: Cast) -> None:
     """The fire half is written as a watch rather than a damage modifier so
     that the extra really is fire rather than a nameless addition to
-    whatever the blow deals. The racial half names a trait the spec gives
-    no ref for and nothing raises another row's bonus."""
+    whatever the blow deals.
+
+    **The racial half is written, and its marker's first premise was
+    false.** It read *"names a trait the spec gives no ref for"* -- the
+    spec names `rt:r8-t0` outright, so the ETL resolved it and there was
+    nothing to match by word. The second half was true of the tree as it
+    stood: that trait wrote its printed 1 down, so there was no number
+    to change. It reads `c.amount_for(c.ref, 1)` now, which is
+    `c.change_amount`'s read half and the pattern `f3788` and the three
+    warlord rows already use.
+
+    **The raise is a typed bonus of its own and not `c.change_amount`,
+    and that is an arming-race decision rather than a shortcut.** The
+    pair works -- the trait reading `c.amount_for(c.ref, 1)` and this row
+    raising it to 2 measured 2 against a control's 1 -- and `c.bonus`
+    takes a plain `int`, so the trait's amount is fixed when it arms and
+    `turns.arm_traits` runs the two in an order no card states.
+    `cf:vampire-f2` records the same choice for `f3621`: withholding
+    cannot lose that race. So this adds `kind="item"` under the trait's
+    own imported gate, and no order can break it.
+
+    **`dropped=`, and the clause it names is the narrowing rather than
+    the raise.** The card says *"when you use an attack power **through
+    this rod**"*, and that is not askable for an **implement**:
+    `AttackResult.weapon` is stamped only by a weapon attack -- its own
+    comment says so, and it is what keeps an implement power from
+    claiming the sword in the other hand -- and the 60-key attack context
+    has no `implement`. So the raise is laid for the encounter while the
+    rod is held, which is print's case for a character wielding one
+    implement and wider than print for one wielding two. Said plainly
+    rather than left for a reader: the direction of the error is the
+    wrong one, and it is why this keeps a marker.
+
+    Gated on the race by ref, not by the printed word -- `#1542`'s
+    division. #1543.
+    """
 
     def scorch(ev: Hit) -> None:
         if ev.attacker != c.me:
@@ -2237,6 +2283,23 @@ def i2301x1(c: Cast) -> None:
             c.flat(c.enhancement, dtype=DamageType.FIRE, on=ev.target)
 
     c.watch(Hit, scorch, until=When.ENCOUNTER)
+    # **The racial half**, gated on the wielder's race by ref. `r8` is
+    # the race the card names; resolving the printed word to the ref is
+    # the main session's job and the ref is what a tracked file may
+    # carry. #1542.
+    # **`on=c.me` explicitly.** `c.race_of` follows `c.target` like
+    # almost everything on `Cast`, and this row's target line is SELF
+    # with no target on the board -- so a bare `c.race_of()` answered
+    # `""` for every character and the condition was dead.
+    if c.race_of(on=c.me) == _I2301_RACE:
+        # `kind="item"`, so it ADDS to the trait's racial one rather than
+        # colliding with it -- two modifiers of one kind are
+        # non-stacking and the second would be worth nothing. And
+        # `vs_bloodied` is the trait's own gate, imported rather than
+        # copied, so the two halves of the printed sentence cannot
+        # disagree about when they apply.
+        c.bonus("attack", _I2301_RAISE, kind="item", on=c.me,
+                until=When.ENCOUNTER, when=vs_bloodied(c))
 
 
 @power(

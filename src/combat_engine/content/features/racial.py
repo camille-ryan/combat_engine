@@ -684,6 +684,18 @@ def rt_r7_t2(c: Cast) -> None:
         c.bonus(defence, 1, kind="racial", on=me, until=_HOLDS)
 
 
+def vs_bloodied(c: Cast) -> Callable[[dict[str, Any]], bool]:
+    """"Against bloodied enemies" -- the gate `rt:r8-t0` is keyed on.
+
+    Exported because `i2301x1` raises that trait's bonus under the same
+    printed condition, and a second copy of a `when=` is how two halves
+    of one sentence come to disagree. The attack context names its
+    target, so the question is asked of the creature being swung at.
+    """
+    return lambda ctx: (ctx.get("target") is not None
+                        and c.bloodied(ctx["target"]))
+
+
 # -- r8 ----------------------------------------------------------------
 
 
@@ -691,11 +703,28 @@ def rt_r7_t2(c: Cast) -> None:
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r8_t0(c: Cast) -> None:
     """The attack context names its target, so "against bloodied enemies"
-    is asked of the creature being swung at rather than of the swinger."""
+    is asked of the creature being swung at rather than of the swinger.
+
+    **The gate is `vs_bloodied` and not a lambda inline**, because
+    `i2301x1` prints *"your bonus to attack rolls from your `rt:r8-t0`
+    racial trait increases by 1"* and raises it under the **same**
+    condition. One copy, imported, so the two cannot drift.
+
+    **`c.change_amount` was tried for that card and is the wrong shape
+    here.** It works -- the trait reading `c.amount_for(c.ref, 1)` and
+    the rod raising it to 2 was measured at 2 against a control's 1 --
+    and it loses an **arming race**: `c.bonus` takes a plain `int`, so
+    the amount is fixed when the trait arms, and `turns.arm_traits` runs
+    the two in an order no card states. `cf:vampire-f2` records the same
+    choice for `f3621` in as many words: *"Gated rather than removed,
+    deliberately [...] a feat arming first would find nothing to remove.
+    Withholding cannot lose that race."* So the rod adds its own typed
+    bonus instead, which no order can break. #1543.
+    """
     me = c.me
     c.bonus(
         "attack", 1, kind="racial", on=me, until=_HOLDS,
-        when=lambda ctx: ctx.get("target") is not None and c.bloodied(ctx["target"]),
+        when=vs_bloodied(c),
     )
 
 

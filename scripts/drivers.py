@@ -53196,6 +53196,128 @@ def a_story_clause_is_narrative(out: Result) -> None:
     )
 
 
+def a_rod_raises_a_racial_attack_bonus(out: Result) -> None:
+    """"Your bonus to attack rolls from your `rt:r8-t0` racial trait
+    increases by 1."
+
+    `i2301x1`. The marker was `c.racial_row()` on two grounds and the
+    first was false: *"names a trait the spec gives no ref for"* -- the
+    spec names `rt:r8-t0` outright. The second was true of the tree as it
+    stood: nothing raised another row's bonus.
+
+    **`c.change_amount` is the facility for that and is the wrong shape
+    here**, which is the finding worth keeping. It works -- the trait
+    reading `c.amount_for(c.ref, 1)` and the rod raising it to 2 measured
+    2 against a control's 1 -- and it loses an **arming race**: `c.bonus`
+    takes a plain `int`, so the trait's amount is fixed when it arms, and
+    `turns.arm_traits` runs the two in an order no card states.
+    `cf:vampire-f2` records the same choice for `f3621`: withholding
+    cannot lose that race.
+
+    So the rod lays its own `kind="item"` bonus under the trait's **own
+    imported gate**, and the arms below include both arming orders.
+
+    Five arms:
+
+    * the right race with the rod gets 2 -- the printed 1 plus 1;
+    * **in either arming order**, which is the whole reason for this
+      shape rather than `change_amount`;
+    * another race gets the trait's 1 alone, so the rod's half is really
+      gated on the race;
+    * an unbloodied target gets nothing at all, which is the shared
+      condition and the control that stops the arms above reading as an
+      unconditional bonus;
+    * and the two halves use **one** predicate object, so a copy cannot
+      drift.
+
+    #1543.
+    """
+    from combat_engine.content.features.racial import vs_bloodied
+    from combat_engine.content.items.implement_d import (
+        _I2301_RACE,
+        _I2301_RAISE,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Health, Mods
+    from combat_engine.engine.dsl import REGISTRY
+
+    TRAIT, ROD = "rt:r8-t0", "i2301x1"
+    PRINTED = 1
+
+    def attack_bonus(race: str, *, bloodied: bool = True,
+                     rod_first: bool = True) -> int:
+        """The attack bonus against one foe, after arming both rows.
+
+        **An unrelated board.** `audit.board` arms every `action=NONE`
+        row including the one under test, so a board built for either of
+        these two has already paid before the race can be rewritten --
+        and the trait's `kind="racial"` modifier is non-stacking, so a
+        second one laid afterwards is worth nothing and the arm reads the
+        printed 1 whatever the rod did.
+        """
+        world, me, _ = _board("f419", 1)
+        build = world.get(me, Build)
+        if build is None:
+            return -99
+        build.choices = {t for t in build.choices
+                         if not str(t).startswith("race:")} | {f"race:{race}"}
+        rig = Cast(world=world, me=me, ref="drivers:rod")
+        foe = next(iter(rig.enemies()), None)
+        if foe is None:
+            return -99
+        hurt = world.need(foe, Health)
+        hurt.hp = (hurt.max_hp // 2 - 1) if bloodied else hurt.max_hp
+        for ref in ([ROD, TRAIT] if rod_first else [TRAIT, ROD]):
+            REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        held = world.get(me, Mods)
+        return held.total("attack", {"target": foe}) if held else -99
+
+    want = PRINTED + _I2301_RAISE
+    first = attack_bonus(_I2301_RACE)
+    second = attack_bonus(_I2301_RACE, rod_first=False)
+    out.that(
+        first == want,
+        "the race the card names, holding the rod, gets the trait's"
+        " printed bonus plus the rod's -- laid `kind=\"item\"` against"
+        " the trait's `racial`, because two modifiers of one kind are"
+        " non-stacking and the second would be worth nothing",
+        f"{first}, wanted {want}",
+    )
+    out.that(
+        second == want,
+        "**and the same in the other arming order**, which is why this"
+        " is a bonus of its own rather than `c.change_amount`: that one"
+        " is read when the trait arms, and `arm_traits` states no order",
+        f"trait first {second}, rod first {first}",
+    )
+    other = attack_bonus("r7")
+    out.that(
+        other == PRINTED,
+        "another race gets the trait's printed bonus alone, so the rod's"
+        " half really is gated on the race -- by ref, since the card"
+        " prints a word and a tracked file may not carry one",
+        f"{other}, wanted {PRINTED}",
+    )
+    unbloodied = attack_bonus(_I2301_RACE, bloodied=False)
+    out.that(
+        unbloodied == 0,
+        "and an unbloodied target gets NOTHING from either half -- the"
+        " shared printed condition, and the control without which both"
+        " arms above pass on an unconditional bonus",
+        f"{unbloodied}",
+    )
+    # -- one predicate, not two ------------------------------------------
+    probe, me2, _ = _board("f419", 1)
+    rig2 = Cast(world=probe, me=me2, ref="drivers:rod")
+    out.that(
+        callable(vs_bloodied(rig2)),
+        "and the gate is one exported predicate the trait and the rod"
+        " both call, so a second copy of the printed condition cannot"
+        " drift from the first",
+        f"{vs_bloodied(rig2)!r}"[:60],
+    )
+
+
 def poison_belt_excludes_a_family(out: Result) -> None:
     """"Nondwarf allies within 3 squares gain a +5 item bonus to saving
     throws against poison effects."
@@ -137217,6 +137339,11 @@ DRIVERS = {
         poison_belt_excludes_a_family,
         "i895x1 withholds its poison save bonus from one race family, by"
         " ref",
+    ),
+    "rod_raises_racial": (
+        a_rod_raises_a_racial_attack_bonus,
+        "i2301x1 adds to a racial attack bonus without losing the arming"
+        " race",
     ),
     "no_concealment": (
         concealment_denied_without_cover,
