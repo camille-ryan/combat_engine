@@ -448,6 +448,14 @@ CATEGORIES: dict[str, dict] = {
                 "freeze",
                 "terraform",
                 "terrain",
+                # **Beside `terrain` because they are the two halves of
+                # one printed sentence.** `cf:vampire-f2` burns a vampire
+                # that ends its turn *"in direct sunlight AND lacks a
+                # protective covering"* -- `c.terrain("sunlight")` is the
+                # first conjunct and this pair is the second. Covered is
+                # the default, so `uncovered` is the exception and
+                # `uncover` is the door the story engine opens. #1511.
+                "uncover", "uncovered",
                 "unlit",
                 "wall", "zone",
             ]),

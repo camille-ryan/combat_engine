@@ -30631,27 +30631,24 @@ def scope_boundary(out: Result) -> None:
              f"power {MAX_POWER_LEVEL}, item {etl_item.MAX_ITEM_LEVEL},"
              f" monster {MAX_MONSTER_LEVEL} against README {pcs}/{monsters}")
 
-    #: **One named, dated carve-out, pending a ruling.**
-    #: `cf:vampire-f2` is a level-0 feature a dealt vampire holds, and it
-    #: carries `gear.protective_covering` -- the conjunct in *"and lack a
-    #: protective covering such as a cloak or other heavy clothing"*.
-    #: Nothing says whether a character is covered up, and both readings
-    #: are measurably wrong: the `neck` slot also holds amulets and most
-    #: dealt characters have one, which makes the clause a uniformly dead
-    #: gate, while ignoring the conjunct invents damage against a player.
+    #: **Empty, and `#1511` is why it is empty rather than gone.** This
+    #: carried `cf:vampire-f2` while its printed covering conjunct -- *"and
+    #: lack a protective covering such as a cloak or other heavy
+    #: clothing"* -- had no answer, because nothing on a board said whether
+    #: a character is covered up and both obvious readings were wrong in a
+    #: measurable direction.
     #:
-    #: `declined_clause=` is the marker that fits if the covering is a
-    #: scope decision -- `Power.unfinished` subtracts it and this list
-    #: empties itself -- but that marker requires whose call it was and a
-    #: date, which is Camille's. Parked as `#1511`, tagged `question`.
+    #: Camille ruled it: *"treat the character as covered by default unless
+    #: the story engine fabricates a reason for the character to be
+    #: uncovered."* `c.uncovered()` is that gate, False by default, so the
+    #: row is finished and the assertions below are back to their full
+    #: strength.
     #:
-    #: **This rule has carried exactly such a carve-out before**, for
-    #: `cf:warlord-marshal-f0`, until `#1310` settled it -- so this is
-    #: the mechanism rather than a loosening, and it is one ref with a
-    #: reason and an issue rather than a raised count. Remove the entry
-    #: the day the ruling lands; the assertions below are strictly
-    #: stronger without it.
-    PENDING_A_RULING = ("cf:vampire-f2",)
+    #: Kept as an empty tuple rather than deleted: this rule has carried
+    #: such a carve-out twice now -- `cf:warlord-marshal-f0` until `#1310`,
+    #: this one until `#1511` -- so the mechanism is worth keeping
+    #: available with its reasoning, and an empty one asserts nothing.
+    PENDING_A_RULING: tuple[str, ...] = ()
 
     marked = sorted(r for r, p in REGISTRY.items()
                     if r.startswith("cf:") and p.unfinished
@@ -30678,7 +30675,7 @@ def scope_boundary(out: Result) -> None:
              " subtraction would keep cancelling a proficiency a later"
              f" feat legitimately restores. Every marked row is above"
              f" level {pcs} ({len(marked)} marked, {len(below)} in"
-             f" scope, {len(PENDING_A_RULING)} carved out pending #1511)",
+             f" scope, {len(PENDING_A_RULING)} carved out)",
              f"in scope and marked: {below};"
              f" carved out: {list(PENDING_A_RULING)}")
 
@@ -30704,8 +30701,7 @@ def scope_boundary(out: Result) -> None:
              "and no marked row is dealt to any character this project"
              f" builds -- {len(chargen.BUILDS)} classes,"
              f" {sum(len(v) for v in chargen.BUILDS.values())} legs,"
-             f" levels 1 to {pcs}, bar {list(PENDING_A_RULING)} pending"
-             f" the ruling on #1511",
+             f" levels 1 to {pcs}, bar {list(PENDING_A_RULING)}",
              f"{others}")
 
     # The in-scope row's two symbols are `chargen.` ones, which is the
@@ -52940,6 +52936,109 @@ def concealment_denied_without_cover(out: Result) -> None:
             " laid by hand would not do",
             f"waiver {was} inside, {waived_on(world, walker)} outside",
         )
+
+
+def a_vampire_burns_only_uncovered(out: Result) -> None:
+    """"If you end your turn in direct sunlight and lack a protective
+    covering such as a cloak or other heavy clothing."
+
+    `cf:vampire-f2`'s sunlight clause was written **without** the
+    conjunct, so it burned every vampire that ended a turn in the sun --
+    print's case for one with no cloak and **stronger than print** for
+    one who has it, which is the direction a penalty must not err in.
+    Nothing on a board said whether a character is covered up, and the
+    two obvious readings were each measurably wrong: the **neck** slot
+    also holds amulets, so reading it makes the clause a uniformly dead
+    gate.
+
+    Camille's ruling, `#1511`:
+
+        "This is primarily narrative. I would treat the character as
+         covered by default unless the story engine fabricates a reason
+         for the character to be uncovered."
+
+    So `c.uncovered()` is the gate and it is **False by default**.
+
+    Four arms:
+
+    * a vampire in sunlight, covered -- the default -- takes nothing;
+    * the same vampire after `c.uncover()` takes the printed 5 radiant
+      **and** is weakened, which is the whole clause and not half of it;
+    * the vampire's own radiant vulnerability adds to it, which is the
+      card's parenthetical and the reason the damage is typed;
+    * and `f3621`, which removes both the vulnerability and the
+      sunlight damage, still wins over an uncovered vampire -- the
+      control that stops the gate being read as the only thing that
+      decides this.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.events import TurnEnd
+    from combat_engine.engine.query import is_
+    from combat_engine.engine.types import Condition
+
+    def sunbathe(*, uncover: bool, sunproof: bool = False) -> tuple[int, bool]:
+        """End a turn in sunlight and report damage taken and weakened.
+
+        The feature is a trait, so `audit.board` has already armed it --
+        which is what this arm wants: arming it again would install a
+        second watch and double the burn, the fault `#1500`'s own rule
+        records against itself.
+        """
+        # **The board is chosen by which row it must ARM, not patched
+        # afterwards.** `f3621`'s own board deals a vampire holding both
+        # the feat and the feature, so the feature arms having seen the
+        # feat. Granting the feat to the plain board and re-running the
+        # body instead left the ORIGINAL watch standing -- two watches,
+        # and the one without the feat fired, so the control read 11
+        # damage and looked like the feat doing nothing.
+        world, me, _ = _board("f3621" if sunproof else "cf:vampire-f2", 1)
+        known = world.need(me, Powers)
+        c = Cast(world=world, me=me, ref="drivers:sun")
+        # The premise of the control, asserted rather than assumed: the
+        # sunproof board really does hand the vampire the feat.
+        assert ("f3621" in known.all) is sunproof, known.all
+        world.terrain = frozenset({"sunlight"})
+        if uncover:
+            c.uncover(on=me)
+        hurt = world.need(me, Health)
+        was = hurt.hp
+        world.bus.emit(TurnEnd(actor=me, round=world.round or 1))
+        return was - hurt.hp, is_(world, me, Condition.WEAKENED)
+
+    covered, covered_weak = sunbathe(uncover=False)
+    out.that(
+        covered == 0 and not covered_weak,
+        "a vampire ending its turn in sunlight takes NOTHING while"
+        " covered, which is the default and is the ruling -- the clause"
+        " used to fire on every vampire, which is stronger than print",
+        f"damage {covered}, weakened {covered_weak}",
+    )
+
+    bare, bare_weak = sunbathe(uncover=True)
+    out.that(
+        bare > 0 and bare_weak,
+        "and the SAME vampire burns once `c.uncover()` has been called"
+        " -- the whole clause, damage and weakened, rather than half of"
+        " it",
+        f"damage {bare}, weakened {bare_weak}",
+    )
+    out.that(
+        bare > 5,
+        "and it is more than the printed 5, because the feature's own"
+        " radiant vulnerability adds to it -- the card's parenthetical,"
+        " and the reason the damage is typed rather than flat",
+        f"{bare} against a printed 5",
+    )
+
+    proofed, proofed_weak = sunbathe(uncover=True, sunproof=True)
+    out.that(
+        proofed == 0 and not proofed_weak,
+        "**and `f3621` still wins over an uncovered vampire** -- it"
+        " removes the vulnerability and the sunlight damage both, so the"
+        " covering gate is not the only thing deciding this",
+        f"damage {proofed}, weakened {proofed_weak}",
+    )
 
 
 def a_story_clause_is_narrative(out: Result) -> None:
@@ -136809,6 +136908,11 @@ DRIVERS = {
         a_story_clause_is_narrative,
         "a narrative clause whose meaning is the story engine's, and the"
         " vocabulary stays closed",
+    ),
+    "vampire_covering": (
+        a_vampire_burns_only_uncovered,
+        "a vampire burns in sunlight only once the story engine says it"
+        " is uncovered",
     ),
     "no_concealment": (
         concealment_denied_without_cover,

@@ -941,7 +941,6 @@ def cf_vampire_f3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("gear.protective_covering",),
 )
 def cf_vampire_f2(c: Cast) -> None:
     """The vampire's five printed benefits and weaknesses.
@@ -953,21 +952,33 @@ def cf_vampire_f2(c: Cast) -> None:
     standing feature, which would otherwise be saved off on the
     vampire's first turn.
 
-    **The sunlight clause is written and its covering waiver is not.**
-    *"If you end your turn in direct sunlight and lack a protective
-    covering such as a cloak or other heavy clothing"* -- `sunlight` is
-    one of the eighteen words in `cast.TERRAIN_WORDS`, so the first half
-    asks `c.terrain("sunlight")`; nothing says whether a character is
-    covered up. Reading the **neck** slot for it was considered and
-    refused: an amulet fills that slot and would then work as a sun
-    shield, which is wider than the card in the one direction a penalty
-    must not be.
+    **The sunlight clause is written and its covering waiver is settled
+    by ruling.** *"If you end your turn in direct sunlight and lack a
+    protective covering such as a cloak or other heavy clothing"* --
+    `sunlight` is one of the eighteen words in `cast.TERRAIN_WORDS`, so
+    the first half asks `c.terrain("sunlight")`. Nothing on a board said
+    whether a character is covered up, and the two obvious readings were
+    each wrong in a measurable direction: the **neck** slot also holds
+    amulets, so reading it makes the clause a uniformly dead gate, while
+    ignoring the conjunct invents damage against a player.
 
-    So the clause fires whenever the vampire ends its turn in sunlight,
-    which is print's own case for a vampire without a covering -- and is
-    **stronger than print for one who has it**. That is the direction of
-    the error, said plainly rather than left for a reader to find, and it
-    is why `gear.protective_covering` is a marker rather than a note.
+    Camille, asked on `#1511`:
+
+        "This is primarily narrative. I would treat the character as
+         covered by default unless the story engine fabricates a reason
+         for the character to be uncovered."
+
+    So the gate is `c.uncovered()`, **False by default**, and the clause
+    does not fire for an ordinary vampire standing in the sun. That is
+    weaker than print for a vampire who has lost its cloak and exactly
+    print for every other -- the safe direction for a penalty, and the
+    opposite of the error the marker used to name. `c.uncover()` is the
+    door, and it is the story engine's to call: a covering is lost to a
+    scene, not to anything a fight does.
+
+    `Scene.exposure` was considered as the carrier and refused:
+    `story.module.DANGERS` is a printed table of nine environmental
+    dangers with Endurance DCs, and a tenth word would corrupt it.
 
     **The undead half is written, and the verb I marked as missing
     already existed.** *"You are an undead creature. You are unaffected
@@ -1025,6 +1036,16 @@ def cf_vampire_f2(c: Cast) -> None:
 
     def burned(ev: TurnEnd) -> None:
         if ev.actor != me or sunproof or not c.terrain("sunlight"):
+            return
+        # The printed conjunct, read every turn rather than once: a
+        # covering could be lost between one turn and the next.
+        #
+        # **`me`, explicitly.** `c.uncovered()` defaults to `c.target`
+        # like almost everything on `Cast`, and this row's target line is
+        # `NO_TARGET` -- so the bare call asked about nobody and answered
+        # False for every vampire, covered or not. Caught by the rule's
+        # second arm reading 0 damage on an uncovered one.
+        if not c.uncovered(me):
             return
         # The radiant vulnerability this feature itself granted adds to
         # this, which is the card's own parenthetical -- and is why the

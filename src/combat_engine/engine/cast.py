@@ -21901,6 +21901,60 @@ class Cast:
 
         return _has(self.world, on if on is not None else self.target, sense)
 
+    #: The label a covering waiver is withheld under -- see
+    #: `Cast.uncovered`. One spelling, so the reader and the writer
+    #: cannot drift. Private, like the four constants above it: a public
+    #: upper-case member on `Cast` is a shape `scripts/symbols.py` has no
+    #: category for, and a constant is not a verb an author looks up.
+    _UNCOVERED = "uncovered"
+
+    def uncover(self, *, on: int | None = None,
+                until: When = When.ENCOUNTER) -> Effect | None:
+        """Say this creature is **not** wearing a protective covering.
+
+        *"If you end your turn in direct sunlight and lack a protective
+        covering such as a cloak or other heavy clothing"* --
+        `cf:vampire-f2`. Nothing on a board says whether a character is
+        covered up, and the two obvious readings are each wrong in a
+        measurable direction: the **neck** slot also holds amulets, so
+        reading it makes the clause a uniformly dead gate, while ignoring
+        the conjunct invents damage against a player.
+
+        Camille's ruling, asked on `#1511`:
+
+            "This is primarily narrative. I would treat the character as
+             covered by default unless the story engine fabricates a
+             reason for the character to be uncovered."
+
+        So **covered is the default** and this is the door for the
+        exception. It is the story engine's to call -- a covering is lost
+        to a scene, not to anything a fight does -- and `#1511` is where
+        that half is recorded. `Scene.exposure` is deliberately **not**
+        the carrier: `DANGERS` is a printed table of nine environmental
+        dangers with Endurance DCs, and a tenth word would corrupt it.
+
+        Yours, so it defaults to the caster, like the senses above.
+        """
+        return self.effect(f"{self._UNCOVERED}", until=until, on=on)
+
+    def uncovered(self, on: int | None = None) -> bool:
+        """Is this creature without a protective covering? **False by
+        default**, which is Camille's ruling on `#1511` -- see
+        `Cast.uncover` for the quote and for why the neck slot is not
+        read.
+
+        A reader with one caller today (`cf:vampire-f2`) and a default
+        that is the printed answer for every character nobody has
+        undressed, so the gate is live rather than a path waiting for a
+        writer: it decides the clause every turn and decides it the way
+        the ruling says.
+        """
+        who = self._who(on)
+        if who is None:
+            return False
+        return any(e.label.endswith(self._UNCOVERED)
+                   for e in self.world.effects.of(who))
+
     def darkvision(
         self, radius: int = 0, *, on: int | None = None,
         until: When = When.ENCOUNTER,
