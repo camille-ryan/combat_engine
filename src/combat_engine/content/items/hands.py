@@ -935,7 +935,7 @@ def i839x1(c: Cast) -> None:
 
 @power("i839p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
-       dropped=("query.speed(mode=)", "c.double_granted_move(mode=)"))
+       dropped=("c.double_granted_move(mode=)",))
 def i839p1(c: Cast) -> None:
     """Climbing at full speed is a movement mode at that speed; doubling
     climb movement somebody *else* grants is the half that is missing.
@@ -964,17 +964,25 @@ def i839p1(c: Cast) -> None:
     stronger than the printed sentence. Nothing else in the tree waited on the
     old spelling.
 
-    **Not a singleton after all, and it has a prerequisite.** The clause
-    doubles *climbing* movement, and nothing reads a mode's own speed:
-    `query.speed(world, eid, ctx)` takes a context carrying
+    **Not a singleton after all, and it had a prerequisite.** The clause
+    doubles *climbing* movement, and nothing read a mode's own speed:
+    `query.speed(world, eid, ctx)` took a context carrying
     `{"charge": True}` and nothing else, and `Movement.speed` is one
-    int. So before anything can be doubled "for this mode", a mode's
-    distance has to be readable -- which is `i1066p1`'s
-    `query.speed(mode=)`, named here too so `blocked --group` shows the
-    two rows on one facility instead of two unrelated singletons.
+    int. So before anything could be doubled "for this mode", a mode's
+    distance had to be readable -- named here as well as on `i1066p1` so
+    `blocked --group` showed the two rows on one facility instead of two
+    unrelated singletons.
 
-    That ordering matters: building the doubling first would have
-    nothing to double. #1572."""
+    That ordering mattered: building the doubling first would have had
+    nothing to double. #1572.
+
+    **The prerequisite landed and is off the marker.**
+    `query.mode_speed(world, eid, mode)` is the reader -- `#1591`, which
+    came out of `query.speed` leaving 47 stat blocks unable to move -- so
+    `c.mode_speed("climb")`'s worth of distance is readable now and only
+    the **doubling** is left. It is still the harder half and the note
+    above still describes it: a wildcard for "any power", and a multiplier
+    where `squares_for` adds."""
     c.mode("climb", c.speed_of(), on=c.me, until=When.ENCOUNTER)
 
 
