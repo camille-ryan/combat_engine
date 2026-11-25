@@ -1215,7 +1215,7 @@ def i2393x1(c: Cast) -> None:
 
 @power("i2393p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
        reach=Melee(1), target=ONE_CREATURE,
-       dropped=("Scenery.holds_a_grab",))
+       dropped=("actions.release_grab()",))
 def i2393p1(c: Cast) -> None:
     """Relief from a cost the engine **now** charges, which is what made
     this writable.
@@ -1249,18 +1249,53 @@ def i2393p1(c: Cast) -> None:
     they are laid under its ref, so the hold is found by label and
     suspended for as long as this power is up.
 
-    **What is still dropped is the sash itself.** The card says it
-    *detaches*, holds the creature *"until you command it to cease"*, and
-    *"uses your Fortitude and Reflex defenses for resisting the creature's
-    escape"* -- a `Scenery` standing in a square and holding a
-    `Relation.GRABBED_BY`, which that component cannot do: the relation
-    names two creatures, and `escape` reads the **grabber's** defences, so
-    an object holding a grab has no defences to read. That is one gap,
-    named here for the first time, and it is a layer below this row rather
-    than a keyword on a verb.
+    **`Scenery.holds_a_grab` was the wrong gap, and the reason is in the
+    card's own wording.** The old note read: *"a `Scenery` standing in a
+    square and holding a `Relation.GRABBED_BY`, which that component
+    cannot do: the relation names two creatures, and `escape` reads the
+    grabber's defences, so an object holding a grab has no defences to
+    read."* Measured 2026-11-25, **every clause of that is false now**:
 
-    What a player sees today is therefore the printed relief, bought at
-    the printed cost, with the sash's detachment left as flavour.
+    * `Relations.set` takes plain ints and never asked for creatures. An
+      object holds the relation: `c.grabbed_by(on=victim)` returns it.
+    * a `terrain.put` object carries `Defenses` -- the DMG page-65 table
+      by size, FORT 10 / REF 5 Medium -- so there is something to read.
+    * `c.lend_defences` substitutes the owner's number through
+      `query.defence`'s `lends` branch. Staged: the object's FORT went
+      **8 -> 20**, the owner's base plus level term.
+    * `escape.attempt` makes no creature assumption anywhere -- it reads
+      the holder list and calls `defence()`.
+    * and a row **can** place one mid-fight: `content.terrain.put` works
+      during an encounter, `#1594`.
+
+    So the mechanism exists. **It should not be used here**, which is the
+    finding: *"the sash detaches from you and sustains the grab **for
+    you**"*. It is still the wearer's grab and the sash takes over the
+    **upkeep** -- which is exactly why the next sentence says *your*
+    defences resist the escape. Leaving the wearer as the grabber is what
+    makes that sentence true; it is not a shortfall.
+
+    Moving the hold to the object would be **observable and wrong**. 178
+    content sites read `c.grabbing`/`c.grabbed_by`, and `actions.py` and
+    `dsl.py` read `GRABBED_BY` for the actor, so the wearer would stop
+    counting as grabbing: every grab-dependent feat switched off and the
+    pull and slide actions gone from the menu. The card grants relief and
+    takes none of that away. `c.transfer` is the verb if a ruling ever
+    says otherwise, and the 178 sites are the price.
+
+    **What is genuinely dropped is one clause, and it is a general gap
+    rather than this card's**: *"until you command it to cease"*. No grab
+    in this engine can be released voluntarily -- `escape` is a hold's
+    only end, there is no `release`/`let_go` action in the menu and no
+    verb for it (`vocab --find grab release` finds none). So the wearer
+    cannot choose to let go, which is **weaker** than print rather than
+    stronger, and is the direction this tree errs in. Hence
+    `actions.release_grab()`, which is owed by every grab and not by this
+    item.
+
+    What a player sees today is the printed relief, bought at the printed
+    cost, resisted with the wearer's own defences as printed, and ending
+    only on an escape.
     """
     victim = c.target
     if victim is None:
