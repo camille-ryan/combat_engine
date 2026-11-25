@@ -3820,7 +3820,7 @@ def i857x1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(DEX, vs=REF),
-    dropped=("Scenery.defences",),
+    dropped=("Scenery.item_ref",),
 )
 def i1145p1(c: Cast) -> None:
     """An item's rows *are* enumerable from a body, so "its powers cannot
@@ -3842,17 +3842,38 @@ def i1145p1(c: Cast) -> None:
     target, with its Reflex of 10 + level. Neither is a thing a power can
     be aimed at here -- only creatures and squares are.
 
-    **Two refusals, not one, and that is why this stays dropped rather than
-    becoming writable the day a `Defences` lands on a `Scenery`.** The
-    marker names the defence half: `query.defence` opens
-    `world.need(eid, Defenses)` and scenery carries no such component. The
-    other half is the target pool -- `Scenery` has **no `Side`, ever**, by
-    its own docstring, so it is outside `query.creatures` and a
-    `target=ONE_CREATURE` row cannot be aimed at one whatever defences it
-    grows. A sibling row on this symbol was deliberately left unwritten for
-    the same reason: no buildable fight puts a `Scenery` where a row needs
-    it, so writing the clause would un-refuse a row to buy something that
-    cannot fire."""
+    **Both refusals this note used to name are gone, and the day it
+    predicted has arrived.** It read *"two refusals, not one, and that is
+    why this stays dropped rather than becoming writable the day a
+    `Defences` lands on a `Scenery`"*. Measured on the audit board,
+    2026-11-25:
+
+    * **the defence half is satisfied.** `terrain.object_defences(size)` is
+      the DMG page-65 table and `terrain.put` lays it, so an object answers
+      `query.defence` -- FORT 10, REF 5 for a Medium one.
+    * **the target pool is satisfied.** `Target(objects=True, loose=True)`
+      unions `query.scenery` in, and `p13128` declares exactly that. With
+      the board's crate genuinely adjacent the pool goes `[2,3,4,5]` to
+      `[2,3,4,5,12]`. It is **range** that excludes it at two squares, not
+      the pool -- which is what made this read as a pool refusal.
+    * and *"no buildable fight puts a `Scenery` where a row needs it"* is
+      false. `audit.board` stands up one attackable Medium object with 20
+      hit points, and `#1233` says it is there **because** five rows
+      carried this symbol.
+
+    **What is left is one field, and it is not a defence.** The card prints
+    *"use a Reflex defense of 10 + the level of the object or effect"* for
+    an unattended magic item -- not the size table, which is what a crate
+    gets. So the row has to know **which magic item the thing on the floor
+    is**, and `Scenery` has no link to one: its fields are `by`,
+    `category`, `fastened`, `kind`, `material`, `weight`, and the board's
+    object carries no `Stats` at all, so there is no level to add 10 to.
+    Hence `Scenery.item_ref`.
+
+    `f3015b`'s `Scenery.wielded_as` is the **same missing link seen from
+    the other side** -- it wants which weapon an object is so a blow can be
+    tied to it, where this wants the level. Named apart because the two
+    rows go green on different halves, which a shared symbol cannot do."""
     if not c.strike():
         return
     foe = c.target
