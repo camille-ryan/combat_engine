@@ -951,6 +951,22 @@ def i839p1(c: Cast) -> None:
     the multiplier still to do, which is the "ready when a third of it
     landed" failure this tree keeps paying for.
 
+    **The wildcard half exists and is unavailable here, which is narrower
+    than "there is no wildcard" and says what to build.** `c.extend_every`
+    is exactly it -- it keys on the move **kind** rather than a ref, so
+    *"one extra square on every shift"* is sayable -- and it stores under
+    `MOVE_KIND + kind`, read by `Cast._extra_every`. Measured 2026-11-25,
+    the kinds any verb actually asks for are **five**:
+
+        push   pull   slide   shift   teleport
+
+    No `climb`, and no `walk` either. So `c.extend_every("climb", n)`
+    would be stored and **never consulted** -- a modifier nothing reads,
+    which `engine/CLAUDE.md` names as this component's commonest bug. The
+    first piece is therefore making climbing a kind the movement path
+    consults, not inventing a wildcard; the second is still the
+    multiplier, since everything here **adds**.
+
     And a keyword there may be the wrong house entirely. The clause reads
     on either of two things a power grants -- a climb **speed**, which is
     `c.mode` and is a plain `max()` into `Movement.modes` with no modifier
