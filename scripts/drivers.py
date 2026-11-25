@@ -137814,6 +137814,134 @@ def a_bonded_blade_swings_badly_in_another_hand(out: Result) -> None:
              f"bonded_to={g3.weapons[0].bonded_to}")
 
 
+def an_aura_drives_an_affected_creature_out_on_its_turn(out: Result) -> None:
+    """`i3305p1`: *"if the creature starts its turn in the aura, it must
+    use its first action to leave the aura by the shortest route
+    possible, unless no route exists."*
+
+    **`c.walk_toward` is the whole clause**, and the row's marker
+    (`c.must_leave(zone)`) named a verb that already existed under
+    another name. Three of the printed parts come free with it: the move
+    is the creature's **own**, so "its first action" is paid by the
+    mover; it picks the nearest square itself and never asks, which is
+    the shortest route; and it provokes on the way out, which forced
+    movement would not.
+
+    The arms that matter are the two refusals. A creature of **another
+    type** standing in the aura is not compelled -- the aura touches one
+    type at or below the scroll's level -- and a creature with **no
+    reachable square outside** stays put, which is the card's own
+    "unless no route exists".
+
+    Staged throughout: the aura is laid by the row, and the creature is
+    placed inside it by hand, because a dealt board does not reliably put
+    an affected foe in a 2-square burst on turn one.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.query import enemies
+
+    ROW = "i3305p1"
+
+    def staged(*, right_type: bool = True, speed: int = 6):  # noqa: ANN202
+        """The row used, with one foe standing inside the aura.
+
+        **The foe is made the scroll's own type**, which the first draft
+        did not do and which made every arm read as the clause failing:
+        the type is chosen by `c.choose` when the scroll is read, and a
+        dealt foe is whatever the board dealt, so `affected` was False
+        and `flee` returned at once. The chosen word is recovered from
+        the aura's own `closed_to_for`, which the row sets to
+        `kind:<word>` -- so the rule reads the scroll rather than
+        guessing what the headless chooser picked.
+        """
+        world, me, _ev = _board(ROW, 1)
+        foe = enemies(world, me)[0]
+        use(world, me, ROW, spend=False)
+        zones = [z for _i, z in world.zones.all() if z.squares]
+        aura = zones[-1] if zones else None
+        if aura is not None and right_type:
+            word = str(getattr(aura, "closed_to_for", "")).partition(":")[2]
+            if word:
+                Cast(world=world, me=foe, ref="drv").set_origin(word, on=foe)
+        here = world.get(me, Position)
+        inside = sorted(aura.squares)[0] if aura else here.square
+        world.grid.lift(foe)
+        world.grid.place(foe, inside)
+        world.need(foe, Position).square = inside
+        world.need(foe, Movement).speed = speed
+        return world, me, foe, aura
+
+    world, _me, foe, aura = staged()
+    out.that(aura is not None,
+             "premise: the row lays an aura with squares in it",
+             f"aura={None if aura is None else len(aura.squares)} square(s)")
+    aura_id = next(i for i, z in world.zones.all() if z is aura)
+    inside_now = world.zones.occupants(aura_id)
+    out.that(foe in inside_now,
+             "premise: the foe is standing in the aura when its turn"
+             " starts, which is the card's condition",
+             f"occupants={inside_now}")
+
+    before = world.need(foe, Position).square
+    out.that(before in aura.squares,
+             "premise: and its square really is one of the aura's",
+             f"{before}")
+    world.turn = foe
+    world.bus.emit(TurnStart(actor=foe, round=world.round))
+    after = world.need(foe, Position).square
+    out.that(after not in aura.squares,
+             "an affected creature starting its turn inside is driven OUT"
+             " -- the printed compulsion, paid out of its own move",
+             f"{before} -> {after}")
+
+    # -- a creature of another type is not compelled -----------------------
+    w3, _me3, foe3, aura3 = staged(right_type=False)
+    sat = w3.need(foe3, Position).square
+    out.that(sat in aura3.squares,
+             "premise: the wrong-type foe is standing inside too, so the"
+             " arm below is about the type test and not about position",
+             f"{sat}")
+    w3.turn = foe3
+    w3.bus.emit(TurnStart(actor=foe3, round=w3.round))
+    out.that(w3.need(foe3, Position).square == sat,
+             "a creature of ANOTHER type is left where it is -- the aura"
+             " affects one type at or below the scroll's level, so a"
+             " bystander that wandered in is not compelled out",
+             f"{sat} unchanged")
+
+    # -- no route out: it stays, and this arm is WEAKER than it looks -----
+    #
+    # **It cannot tell the early return from a fallback, and the plant
+    # says so.** Replacing `if not out: return` with a fall-back to the
+    # aura's own squares passes this arm. A discriminating stage needs a
+    # creature that can move and has nowhere outside to go, and the
+    # geometry will not pose one: an aura 2 is small enough that one step
+    # from any square inside it reaches a square outside, and standing
+    # the creature beside the centre instead boxes it in to **0**
+    # reachable squares -- which is the speed-0 case again.
+    #
+    # So this asserts the narrower thing it can: a creature with nothing
+    # reachable is not dragged anywhere and the row does not raise. The
+    # early return itself is covered by reading it, not by this arm.
+    # Said out loud rather than left as a green tick. #1580.
+    w2, _me2, foe2, _a2 = staged(speed=0)
+    was = w2.need(foe2, Position).square
+    out.that(not w2.reachable_paths(foe2, 0),
+             "premise: this creature can reach nowhere at all, which is"
+             " the only shape of 'no route' this board can pose",
+             f"{len(w2.reachable_paths(foe2, 0))} reachable")
+    w2.turn = foe2
+    w2.bus.emit(TurnStart(actor=foe2, round=w2.round))
+    out.that(w2.need(foe2, Position).square == was,
+             "it is not dragged anywhere and the row does not raise --"
+             " weaker than the printed 'unless no route exists', and the"
+             " comment above says why the stronger arm cannot be posed",
+             f"{was} unchanged")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -141191,6 +141319,11 @@ DRIVERS = {
         a_bonded_blade_swings_badly_in_another_hand,
         "i2359x1 penalises any other creature swinging the swordmage's"
         " bonded blade, and leaves the owner alone",
+    ),
+    "driven_from_the_aura": (
+        an_aura_drives_an_affected_creature_out_on_its_turn,
+        "i3305p1 drives an affected creature out of its aura on that"
+        " creature's turn, and leaves it alone when no route exists",
     ),
     "vampire_weaknesses": (
         a_vampires_weaknesses_and_the_feat_that_lifts_them,

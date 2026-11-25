@@ -971,8 +971,7 @@ def i3283p1(c: Cast) -> None:
 
 
 @power("i3305p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=CloseBurst(2), target=NO_TARGET,
-       dropped=("c.must_leave(zone)",))
+       reach=CloseBurst(2), target=NO_TARGET)
 def i3305p1(c: Cast) -> None:
     """The creature type is fixed when the scroll is made and carried by
     no column, so it is asked of the decider the way `_element` asks for a
@@ -1019,15 +1018,19 @@ def i3305p1(c: Cast) -> None:
     no route exists."* It was never separately marked, so this row was
     under-marked rather than over.
 
-    **`c.must_leave(zone)` and deliberately NOT
-    `c.must_attack(on=, against=)`, which is where I first put it.** That
-    symbol's five other rows all print a compulsion to *attack* -- "must
-    attack the nearest foe, charging when possible", "a melee attack on a
-    random creature within 5 squares". This clause compels a **move
-    away**, spends the creature's first action on it, and routes by the
-    shortest path. One symbol serving both needs could not go red or
-    green correctly for either, which is the mistake `CLAUDE.md` opens
-    on, and putting it there was mine for about ten minutes. #1564."""
+    **It is written now, and `c.must_leave(zone)` turned out to name a
+    verb that already existed under another name.** The marker was right
+    that this is a compulsion to *move away* and not
+    `c.must_attack(on=, against=)` -- that symbol's five other rows all
+    compel an *attack*, and one symbol serving both needs could not go
+    red or green correctly for either. Where it was wrong is in implying
+    something had to be built: `c.walk_toward` is exactly a compelled
+    walk with no vote for the mover, and `flee` below composes the whole
+    printed clause out of it. #1564, #1580.
+
+    The near-miss is worth keeping: putting this on
+    `c.must_attack(on=, against=)` was mine for about ten minutes, and
+    reading the other five rows is what caught it."""
     from combat_engine.engine.components import Stats
 
     kind = c.choose(list(_SCROLL_KINDS), "the scroll's creature type")
@@ -1049,6 +1052,63 @@ def i3305p1(c: Cast) -> None:
         if not c.is_kind(kind or "", on=foe) or (stats and stats.level > 5):
             continue
         c.penalty("attack", 4, on=foe, until=When.ENCOUNTER, when=in_the_aura)
+
+    def affected(who: int) -> bool:
+        """Is this creature one the scroll's aura touches?
+
+        The same two tests the penalty loop above applies, factored out
+        so the two clauses cannot drift: the printed type, and a level no
+        higher than the scroll's.
+        """
+        stats = c.world.get(who, Stats)
+        return bool(c.is_kind(kind or "", on=who)) and not (
+            stats is not None and stats.level > 5
+        )
+
+    def flee(ev: TurnStart) -> None:
+        """"If the creature starts its turn in the aura, it must use its
+        first action to leave the aura by the shortest route possible,
+        unless no route exists."
+
+        **`c.walk_toward` is the whole clause and `c.must_leave(zone)`
+        was never needed.** That marker read as though a compulsion to
+        exit a region had to be built; this verb already is one -- *"the
+        creature walks the most direct route, no choice"* -- and its own
+        note draws the distinction the card needs: `c.move(toward=)`
+        ranks destinations and lets a real decider pick, where a
+        compulsion gives the mover no vote.
+
+        Three of the printed clause's four parts come free with it. It is
+        the creature's **own** move, so "must use its first action" is
+        paid by the mover rather than the scroll. It picks the nearest
+        square itself and never asks, which is "by the shortest route
+        possible". And it provokes on the way out, which forced movement
+        would not -- the card compels a walk, not a shove.
+
+        The fourth, *"unless no route exists"*, is the early return: with
+        no reachable square outside the aura there is nothing to walk
+        toward and the creature stays put. `reachable_paths` answers both
+        halves at once -- which squares are reachable, and by how long a
+        path -- so the nearest one outside is the shortest route by
+        construction rather than by a second search.
+
+        Gated on `affected`, not merely on standing inside: the aura
+        touches one creature type at or below the scroll's level, and a
+        bystander of another type that wandered in is not compelled.
+        """
+        who = ev.actor
+        if who not in c.world.zones.occupants(aura) or not affected(who):
+            return
+        here = next((z for i, z in c.world.zones.all() if i == aura), None)
+        if here is None:
+            return
+        paths = c.world.reachable_paths(who, c.speed_of(who))
+        out = [sq for sq in paths if sq not in here.squares]
+        if not out:
+            return
+        c.walk_toward(min(out, key=lambda sq: len(paths[sq])), on=who)
+
+    c.watch(TurnStart, flee, until=When.ENCOUNTER)
 
     def swung(ev: AttackRolled) -> None:
         if spent or ev.attacker != c.me:
