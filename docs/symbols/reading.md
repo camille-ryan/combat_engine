@@ -114,6 +114,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.line_of_sight(world: 'World', watcher: 'int', who: 'int') -> 'bool'`
   - `line_of_effect` traced from wherever the watcher is **looking** from.
+- `query.mode_speed(world: 'World', eid: 'int', mode: 'str') -> 'int'`
+  - How far this creature moves **in one named mode**. `"fly"`, `"climb"`,
 - `query.moved_this_action(world: 'World', eid: 'int') -> 'int'`
   - How many squares this creature entered during its current move action.
 - `query.moving_as(world: 'World', eid: 'int', mode: 'str') -> 'bool'`

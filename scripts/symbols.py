@@ -1591,6 +1591,14 @@ READERS: dict[str, list[str]] = {
         "power_conditions",
         "prefers_range", "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of", "terrain",
+        # **Beside `speed`, which is the question it is NOT.** `speed`
+        # answers "how far does this creature move" -- the land budget,
+        # and a flier's own speed when it has no land one, which is what
+        # every budget in `actions.py` reads. `mode_speed` answers "how
+        # far is its climb", one named mode at a time, which two rows
+        # print and nothing could ask. Filed together because somebody
+        # reaching for one will mean the other about half the time.
+        "mode_speed",
     ],
     # **"seeing" is the common case, not the whole section.** `can_hear` is
     # here because it is the same question asked of a different sense, and

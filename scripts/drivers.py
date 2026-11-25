@@ -137942,6 +137942,282 @@ def an_aura_drives_an_affected_creature_out_on_its_turn(out: Result) -> None:
              f"{was} unchanged")
 
 
+def a_creature_with_no_land_speed_moves_by_flying(out: Result) -> None:
+    """A block printing *"Speed 0, fly 6"* moves by flying, and did not move
+    at all.
+
+    `Movement.speed` is the printed **land** speed, and every budget in
+    `actions.py` -- walk, shift, charge, run -- comes from `query.speed`,
+    which read that field alone. So a creature with no land speed was
+    offered 0 squares for all four. Measured over `game.db`: **47 of 3,142
+    stat blocks** are speed 0 with a mode, and every one was immobile in
+    every fight.
+
+    Restricted to flight deliberately, and the corpus is the argument:
+    all 47 can fly (45 fly-only, 2 fly and swim), so there is no
+    climb-only or swim-only block being left behind. Those two want a
+    surface and water to be a budget at all -- `swims` and `climbs` answer
+    them off the terrain, above this -- and a general "best mode" fallback
+    would have invented a rule for cases the corpus does not contain. The
+    climb arm below is the control for that.
+
+    `mode_speed` is the other half and a different question: not "how far
+    does it move" but "how far is its climb", which two rows print and
+    nothing could answer. The condition layer is shared, which is what the
+    dazed arms check -- a capped flier and a capped walker go through one
+    piece of code rather than two copies.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.components import Conditions, Movement
+    from combat_engine.engine.types import Condition
+
+    world, _me, _ev = _board("i3560x1", 1)
+
+    # **Spawned WITH `Conditions`**, because a bare `spawn(Movement(...))`
+    # has none and the two condition arms below then fail on their own
+    # premise rather than on the code they are about. Found exactly that
+    # way.
+    flier = world.spawn(Movement(speed=0, modes={"fly": 6}), Conditions())
+    walker = world.spawn(Movement(speed=6, modes={}))
+    faster = world.spawn(Movement(speed=5, modes={"fly": 8}))
+    rock = world.spawn(Movement(speed=0, modes={}))
+    climber = world.spawn(Movement(speed=0, modes={"climb": 4}))
+
+    out.that(query.speed(world, flier) == 6,
+             "a creature printed with no land speed and a fly speed moves"
+             " at the speed it flies -- the whole of the fix, and 47 stat"
+             " blocks were standing still without it",
+             f"{query.speed(world, flier)}")
+    out.that(query.speed(world, walker) == 6,
+             "an ordinary walker is untouched, which is the regression this"
+             " could most easily have been",
+             f"{query.speed(world, walker)}")
+    out.that(query.speed(world, faster) == 5,
+             "a creature with BOTH keeps its land speed -- the fallback is"
+             " for having none, not for taking the larger of the two, which"
+             " would have quietly sped up 246 more blocks",
+             f"{query.speed(world, faster)}")
+    out.that(query.speed(world, rock) == 0,
+             "speed 0 and no mode is still 0 -- a thing that cannot move"
+             " must not be taught to",
+             f"{query.speed(world, rock)}")
+    out.that(query.speed(world, climber) == 0,
+             "CONTROL: speed 0 with only a CLIMB is still 0. A climb needs a"
+             " surface, which `climbs` answers off the terrain, so a"
+             " best-mode fallback would have walked it across open ground",
+             f"{query.speed(world, climber)}")
+
+    out.that(query.mode_speed(world, climber, "climb") == 4,
+             "while `mode_speed` does report that climb, which is the"
+             " reader's own job and the thing `speed` must not do",
+             f"{query.mode_speed(world, climber, 'climb')}")
+    out.that(query.mode_speed(world, walker, "fly") == 0,
+             "and 0 for a mode the creature has not got",
+             f"{query.mode_speed(world, walker, 'fly')}")
+    out.that(query.mode_speed(world, faster, "fly") == 8,
+             "reading the mode's own number rather than the land speed"
+             " beside it",
+             f"{query.mode_speed(world, faster, 'fly')}")
+
+    cond = world.get(flier, Conditions)
+    if cond is None:
+        out.that(False, "the staged flier carries Conditions -- the premise"
+                        " for the two arms below", "absent")
+        return
+    cond.add(Condition.IMMOBILIZED)
+    out.that(query.speed(world, flier) == 0
+             and query.mode_speed(world, flier, "fly") == 0,
+             "an immobilised flier is stopped on BOTH reads -- the shared"
+             " condition layer, and the thing a second copy of that walk"
+             " would have got wrong first",
+             f"speed={query.speed(world, flier)}"
+             f" fly={query.mode_speed(world, flier, 'fly')}")
+    cond.remove(Condition.IMMOBILIZED)
+    cond.add(Condition.SLOWED)
+    out.that(query.speed(world, flier) == 2
+             and query.mode_speed(world, flier, "fly") == 2,
+             "and a slowed one is capped on both, at the printed 2 rather"
+             " than at half of six",
+             f"speed={query.speed(world, flier)}"
+             f" fly={query.mode_speed(world, flier, 'fly')}")
+    cond.remove(Condition.SLOWED)
+    out.that(query.speed(world, flier) == 6,
+             "and has its speed back when the condition goes, so none of"
+             " the above was a one-way write",
+             f"{query.speed(world, flier)}")
+
+
+def a_summoned_demon_left_alone_picks_the_printed_branch(out: Result) -> None:
+    """`i1066p1`'s Instinctive Effect, which has three choices in a printed
+    order: *"it attacks a bloodied enemy if it can. Otherwise, it moves its
+    speed to a square adjacent to the nearest enemy. If it can do neither of
+    these and a bloodied ally is within its melee reach or charge distance,
+    it attacks that ally instead."*
+
+    The middle choice is why this could not be written before. The demon is
+    `speed=0, modes={"fly": 6}` and `query.speed` read the land field, so it
+    was offered 0 squares; `close_on` returned `None` every time and the
+    list collapsed onto the third branch -- the demon attacking a bloodied
+    **ally** on any turn no bloodied enemy stood beside it, which is
+    strictly worse than leaving the clause out.
+
+    **And the block had to move into the header.** Built as an anonymous
+    `Summon` in the body it could be put on the board and then neither
+    commanded nor left to itself: `c.command` reads the header's `summon=`
+    line and `Cast.instinctive` resolves a block through
+    `get(Companion.ref).summon`, so both found `None` and did nothing.
+    Measured that way first -- the instinct ran and the demon neither moved
+    nor hurt anybody -- which is the arm that would have passed on a row
+    that did nothing at all.
+
+    Staged through `Grid.lift`/`Grid.place` **with `Position.square`
+    written too**, which is `audit._stand_off`'s correction: the occupant
+    index is a separate map and a creature moved by one and not the other
+    stands in two places for every later read.
+
+    Every arm heals the whole board first. The audit board hands out two
+    bloodied allies and no bloodied enemies, so without that the first
+    branch's own staging is ambiguous and the third branch is satisfied by
+    somebody the rule never positioned.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Health, Position
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW = "i1066p1"
+
+    def fresh() -> tuple:
+        world, me, _ev = _board("i3560x1", 1)
+        c = Cast(world=world, me=me, ref=ROW)
+        REGISTRY[ROW].body(c)
+        made = [e for e in list(world.entities)
+                if (cp := world.get(e, Companion)) is not None
+                and getattr(cp, "ref", "") == ROW]
+        return world, me, c, (made[-1] if made else None)
+
+    def stand(world, eid: int, want: tuple) -> bool:  # noqa: ANN001
+        spot = world.get(eid, Position)
+        if spot is None or not world.grid.inside(want):
+            return False
+        if world.grid.occupant(want) not in (None, eid):
+            return False
+        world.grid.lift(eid)
+        spot.square = want
+        world.grid.place(eid, frozenset({want}))
+        return True
+
+    def heal(world, eid: int) -> None:  # noqa: ANN001
+        h = world.get(eid, Health)
+        if h is not None:
+            h.hp = h.max_hp
+
+    def bloody(world, eid: int) -> None:  # noqa: ANN001
+        h = world.get(eid, Health)
+        if h is not None:
+            h.hp = max(1, h.max_hp // 2 - 1)
+
+    def go(world, me: int, c, who: int) -> tuple:  # noqa: ANN001
+        foes = query.enemies(world, me)
+        team = [a for a in c.within(20, of=who, side="team") if a != who]
+        was = {e: world.get(e, Health).hp for e in foes + team
+               if world.get(e, Health) is not None}
+        spot = sorted(query.squares(world, who))
+        c.instinctive(who)
+        hurt = [e for e, hp in was.items()
+                if world.get(e, Health).hp < hp]
+        return sorted(query.squares(world, who)) != spot, hurt
+
+    world, me, c, who = fresh()
+    out.that(who is not None,
+             "the row puts a creature on the board -- the premise for all"
+             " three arms",
+             f"{who}")
+    if who is None:
+        return
+    out.that(query.speed(world, who) == 6,
+             "and it can move, at the fly speed its block prints -- without"
+             " this the middle branch cannot succeed and the printed list"
+             " collapses onto the last one",
+             f"{query.speed(world, who)}")
+
+    # ---- branch one: a bloodied enemy beside it
+    sq = next(iter(query.squares(world, who)))
+    foes = query.enemies(world, me)
+    for i, f in enumerate(foes):
+        heal(world, f)
+        stand(world, f, (min(sq[0] + 9 + i, world.grid.width - 1), sq[1]))
+    for a in c.within(20, of=who, side="team"):
+        if a != who:
+            heal(world, a)
+    stand(world, foes[0], (sq[0] + 1, sq[1]))
+    bloody(world, foes[0])
+    moved, hurt = go(world, me, c, who)
+    out.that(foes[0] in hurt and not moved,
+             "a bloodied enemy standing beside it is attacked where it"
+             " stands -- the first printed choice, and no move",
+             f"hurt={hurt} moved={moved}")
+
+    # ---- branch two: healthy enemies, close enough to reach
+    world, me, c, who = fresh()
+    if who is None:
+        return
+    sq = next(iter(query.squares(world, who)))
+    foes = query.enemies(world, me)
+    for i, f in enumerate(foes):
+        heal(world, f)
+        stand(world, f, (min(sq[0] + 4 + i, world.grid.width - 1), sq[1] + 2))
+    for a in c.within(20, of=who, side="team"):
+        if a != who:
+            heal(world, a)
+    before = min(query.distance_between(world, who, f) for f in foes)
+    out.that(before > 1,
+             "the premise for the move: no enemy is adjacent yet, so"
+             " `close_on` has somewhere to go. Already-adjacent is a"
+             " no-op by design and would pass this arm vacuously",
+             f"nearest={before}")
+    moved, hurt = go(world, me, c, who)
+    after = min(query.distance_between(world, who, f) for f in foes)
+    out.that(moved and not hurt and after == 1,
+             "with no bloodied enemy it moves its speed to a square"
+             " adjacent to the nearest and attacks nobody -- the clause the"
+             " flight fix bought",
+             f"moved={moved} hurt={hurt} nearest {before}->{after}")
+
+    # ---- branch three: nothing reachable, and a bloodied ally
+    world, me, c, who = fresh()
+    if who is None:
+        return
+    sq = next(iter(query.squares(world, who)))
+    foes = query.enemies(world, me)
+    for i, f in enumerate(foes):
+        heal(world, f)
+        stand(world, f, (world.grid.width - 1,
+                         min(i, world.grid.height - 1)))
+    mates = [a for a in c.within(6, of=who, side="team") if a != who]
+    for a in c.within(20, of=who, side="team"):
+        if a != who:
+            heal(world, a)
+    out.that(bool(mates),
+             "the premise: somebody friendly stands within reach or charge"
+             " distance for the last branch to find",
+             f"{mates}")
+    if not mates:
+        return
+    far = min(query.distance_between(world, who, f) for f in foes)
+    out.that(far > query.speed(world, who) + 1,
+             "and no enemy is reachable, which is what makes the last"
+             " branch the only one left rather than merely the last tried",
+             f"nearest={far} speed={query.speed(world, who)}")
+    bloody(world, mates[0])
+    moved, hurt = go(world, me, c, who)
+    out.that(mates[0] in hurt,
+             "it turns on its own side -- the printed last resort, and the"
+             " reason the middle branch mattered: this is what fired on"
+             " every turn while the demon could not move",
+             f"hurt={hurt} ally={mates[0]}")
+
+
 def a_species_exclusion_is_gated_by_ref(out: Result) -> None:
     """`i3560x1` turns on a species, and a species is not a type word.
 
@@ -141501,6 +141777,16 @@ DRIVERS = {
         an_aura_drives_an_affected_creature_out_on_its_turn,
         "i3305p1 drives an affected creature out of its aura on that"
         " creature's turn, and leaves it alone when no route exists",
+    ),
+    "flier_speed": (
+        a_creature_with_no_land_speed_moves_by_flying,
+        "a block printing no land speed and a fly speed moves at the"
+        " speed it flies, where 47 stat blocks could not move at all",
+    ),
+    "summon_instinct": (
+        a_summoned_demon_left_alone_picks_the_printed_branch,
+        "i1066p1's uncommanded demon takes the first of its three"
+        " printed choices that it can",
     ),
     "species_by_ref": (
         a_species_exclusion_is_gated_by_ref,

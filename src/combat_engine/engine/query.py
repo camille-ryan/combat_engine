@@ -1314,9 +1314,40 @@ def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
         if climbed is not None:
             return climbed
     base = mv.speed
+    # **A block printing "Speed 0, fly 6" moves by flying, and until now it
+    # did not move at all.** `Movement.speed` is the printed land speed and
+    # every budget in `actions.py` -- walk, shift, charge, run -- reads this
+    # function, so a creature with no land speed got 0 squares for all four.
+    # Measured over `game.db`: **47 of 3,142 stat blocks** are speed 0 with a
+    # mode, and they were immobile in every fight.
+    #
+    # Restricted to flight **deliberately**, and the corpus is why it costs
+    # nothing: all 47 can fly (45 fly-only, 2 fly and swim), so there is no
+    # climb-only or swim-only block to leave behind. Those two would need a
+    # surface and water to be a budget at all -- `swims` and `climbs` above
+    # answer them from the terrain, which is the right place -- and writing a
+    # general "best mode" fallback here would have invented a rule for cases
+    # the corpus does not contain.
+    #
+    # Before the `speed` modifier, so a bonus adds to the flier's own number
+    # rather than replacing it.
+    if base == 0:
+        flying = mv.modes.get("fly", 0)
+        if isinstance(flying, int) and flying > 0:
+            base = flying
     mods = world.get(eid, Mods)
     if mods is not None:
         base += mods.total("speed", ctx or {})
+    return _after_conditions(world, eid, base)
+
+
+def _after_conditions(world: World, eid: int, base: int) -> int:
+    """What a condition does to a distance already worked out.
+
+    Lifted out of `speed` so the `mode=` read cannot drift from the land
+    read: a dazed flier and a dazed walker are capped and halved by the
+    same code rather than by two copies of it.
+    """
     halved = False
     for c in active(world, eid):
         # `rules_for`, not `rules`: a dozen rows waive part of what a
@@ -1331,6 +1362,36 @@ def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
     if halved:
         base //= 2
     return max(0, base)
+
+
+def mode_speed(world: World, eid: int, mode: str) -> int:
+    """How far this creature moves **in one named mode**. `"fly"`, `"climb"`,
+    `"swim"`, `"burrow"`, `"teleport"` -- whatever `Movement.modes` holds.
+
+    `speed` answers "how far does it move", which is the land budget plus
+    the flight fallback above; this answers "how far is its climb", which
+    is a different question and had no reader. Two rows print a sentence
+    about one mode's own distance -- `i1066p1`'s summon is `speed=0,
+    modes={"fly": 6}` and `i839p1` doubles *climbing* movement somebody
+    else granted -- and both could only reach `Movement.modes` by hand.
+
+    **The `"speed"` modifier is deliberately not added.** It is the land
+    bonus, and whether "+2 speed" lengthens a climb is a printed question
+    nobody here has answered; adding it would decide that silently. The
+    condition layer *is* applied, because a dazed creature's flight is
+    capped by the same sentence that caps its walk.
+
+    0 for a mode the creature does not have, which reads the same as a
+    mode it has at 0 -- `Movement.modes` does not distinguish them and no
+    printed row asks.
+    """
+    mv = world.get(eid, Movement)
+    if mv is None:
+        return 0
+    far = mv.modes.get(mode, 0)
+    if not isinstance(far, int) or far <= 0:
+        return 0
+    return _after_conditions(world, eid, far)
 
 
 def level_term(world: World, eid: int, scale: str) -> int:

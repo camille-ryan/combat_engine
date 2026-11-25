@@ -56,6 +56,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.powers.druid.summons import close_on, nearest
 from combat_engine.engine import (
     AC,
     ANY_FACE,
@@ -858,9 +859,75 @@ def i1066x1(c: Cast) -> None:
     is that row and this one adds nothing to a fight."""
 
 
+def _i1066_instinct(c: Cast, who: int) -> None:
+    """*"It attacks a bloodied enemy if it can. Otherwise, it moves its
+    speed to a square adjacent to the nearest enemy. If it can do neither
+    of these and a bloodied ally is within its melee reach or charge
+    distance, it attacks that ally instead."*
+
+    Three choices in printed order, and the middle one is why this could
+    not be written until now: the creature is `speed=0, modes={"fly": 6}`,
+    and `query.speed` read `Movement.speed` alone, so every budget in
+    `actions.py` offered it **0** squares. `close_on` would have returned
+    `None` every time and the list would have collapsed onto the third
+    branch -- the demon attacking a bloodied **ally** on any turn no
+    bloodied enemy stood beside it, which is strictly worse than leaving
+    the clause out. `query.speed` now falls back to a flier's own speed,
+    measured over the corpus as **47 stat blocks** that were immobile.
+
+    `close_on` and `nearest` come from the druid summon toolkit, which is
+    where this printed tail was written once. Its module docstring carries
+    the reason not to reach for `c.move` here: with no decider installed
+    `c.move` takes the lowest-numbered reachable square, so a creature
+    told to close on somebody *"reliably walked away from everybody"*. The
+    helpers are generic despite their address -- nothing outside `druid/`
+    imported them before this -- and duplicating them here would have
+    meant re-deriving that trap.
+
+    **`side="team"` and not `"ally"`** for the last branch, minus the
+    creature itself. `c.within`'s `side` is read from the **caster**, and
+    `"ally"` excludes the caster -- but the summoner is exactly who the
+    demon turns on, so excluding them would have made the branch about
+    everybody except its likeliest victim.
+
+    Charge distance is its speed, so the last branch's radius is the
+    larger of reach and that -- which for this block is the fly speed, the
+    same number the middle branch now moves on.
+    """
+    reach = 1
+    hurt_foes = [f for f in c.within(reach, of=who, side="enemy") if c.bloodied(f)]
+    if hurt_foes:
+        c.command(who, on=nearest(c, who, hurt_foes)[0])
+        return
+    if close_on(c, who) is not None:
+        return
+    run = max(reach, query.speed(c.world, who))
+    hurt_friends = [
+        a for a in c.within(run, of=who, side="team")
+        if a != who and c.bloodied(a)
+    ]
+    if hurt_friends:
+        c.command(who, on=nearest(c, who, hurt_friends)[0])
+
+
 @power("i1066p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(10), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       dropped=("query.speed(mode=)",))
+       summon=Summon(
+           per_defence={"ac": 2, "fort": 2}, speed=0, modes={"fly": 6},
+           # *"your highest ability +4 vs. AC; 1d8 + your highest ability
+           # modifier damage"*. **`Pick.HIGHEST` on both lines**, which is
+           # what the card says and what a header can hold: the ability
+           # depends on who read the scroll, so it is a rule here and
+           # `Attack.ability_for` answers it per commander.
+           #
+           # The damage side was new in #1580 -- `Damage.bonus` took a flat
+           # number or an ability named as a string, and this phrase is
+           # neither, so written as a word it hit `_bonus_of`'s
+           # `ValueError` and paid **0**.
+           attack=Attack(Pick.HIGHEST, vs=AC, plus=4),
+           damage=Damage("1d8", Pick.HIGHEST),
+           instinctive=_i1066_instinct,
+       ))
 def i1066p1(c: Cast) -> None:
     """The block is printed in the power's own text and the spec carries
     all of it, so a missing block was the wrong hold: the defence
@@ -935,24 +1002,37 @@ def i1066p1(c: Cast) -> None:
     Not markered, because the tree does not marker it and `p11840` and
     `p11841` say it in prose instead: **nothing offers a standard action to
     command a standing summon**, so `c.command` has no door but the
-    Instinctive Effect. 36 inline blocks share that."""
-    c.summon_inline(
-        Summon(
-            per_defence={"ac": 2, "fort": 2}, speed=0, modes={"fly": 6},
-            # *"your highest ability +4 vs. AC; 1d8 + your highest ability
-            # modifier damage"*. **`Pick.HIGHEST` on both lines**, which is
-            # what the card says and what a header can hold: the ability
-            # depends on who read the scroll, so it is a rule here and
-            # `Attack.ability_for` answers it per commander.
-            #
-            # The damage side is new -- `Damage.bonus` took a flat number
-            # or an ability named as a string, and this phrase is neither,
-            # so written as a word it hit `_bonus_of`'s `ValueError` and
-            # paid **0**. #1580.
-            attack=Attack(Pick.HIGHEST, vs=AC, plus=4),
-            damage=Damage("1d8", Pick.HIGHEST),
-        ),
-    )
+    Instinctive Effect. 36 inline blocks share that.
+
+    **The Instinctive Effect is written now**, in `_i1066_instinct` above,
+    and the marker is gone with it. What unblocked it was not a verb here
+    but `query.speed` learning to read a flier's own speed: this creature
+    is `speed=0, modes={"fly": 6}` and was one of **47 stat blocks** that
+    could not move at all.
+
+    **And the `Level 8:` line is out of reach rather than unimplemented**,
+    which is worth saying because level 8 is inside the heroic band and so
+    does not fall under the `Level 11:`/`21:` exemption. It upgrades the
+    damage -- `1d10` and 5 extra against bloodied -- and `Summon.damage` is
+    header data that cannot branch on the dealt plus. It never has to:
+    `i1066`'s row is `base_level=3, scaling=1`, and `BUILD_OPTIONS`'
+    own note records the rule -- *"the base level is what the engine
+    deals"*. So the +2 copy is a higher-level item the dealer does not
+    hand out, and the clause describes a rung no character reaches."""
+    # **The block moved into the header, which is what makes the creature
+    # usable at all.** Built here as an anonymous `Summon` it could be put
+    # on the board and then neither commanded nor left to its own devices:
+    # `c.command` *"reads the header's `summon=` line"* and
+    # `Cast.instinctive` resolves a creature's block through
+    # `get(Companion.ref).summon`, so both found `None` and returned
+    # without doing anything. Measured on all three printed branches --
+    # instinctive ran, and the demon neither moved nor hurt anybody.
+    #
+    # `p11840` is the convention and this is now the same two lines: the
+    # whole block declared above, spent from the body through
+    # `get(c.ref).summon`. The row's own docstring had already said so
+    # before the header carried it.
+    c.summon_inline(get(c.ref).summon)
 
 
 @power("i1217x1", level=3, cls=ITEM, action=ActionType.NONE,
