@@ -1215,7 +1215,7 @@ def i2393x1(c: Cast) -> None:
 
 @power("i2393p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
        reach=Melee(1), target=ONE_CREATURE,
-       dropped=("actions.release_grab()",))
+       )
 def i2393p1(c: Cast) -> None:
     """Relief from a cost the engine **now** charges, which is what made
     this writable.
@@ -1283,19 +1283,29 @@ def i2393p1(c: Cast) -> None:
     takes none of that away. `c.transfer` is the verb if a ruling ever
     says otherwise, and the 178 sites are the price.
 
-    **What is genuinely dropped is one clause, and it is a general gap
-    rather than this card's**: *"until you command it to cease"*. No grab
-    in this engine can be released voluntarily -- `escape` is a hold's
-    only end, there is no `release`/`let_go` action in the menu and no
-    verb for it (`vocab --find grab release` finds none). So the wearer
-    cannot choose to let go, which is **weaker** than print rather than
-    stronger, and is the direction this tree errs in. Hence
-    `actions.release_grab()`, which is owed by every grab and not by this
-    item.
+    **The last clause landed, so this row carries no marker.** *"Until you
+    command it to cease"* had no door at all: `escape` was a grab's only
+    end in the whole engine, with no `release`/`let_go` action and no verb.
+    Chasing that found the page giving **four** ends where this engine had
+    one -- a free action, a release when a condition bars the grabber's
+    opportunity actions, and a release on moving away, none of them built.
+    `#1595`.
 
-    What a player sees today is the printed relief, bought at the printed
-    cost, resisted with the wearer's own defences as printed, and ending
-    only on an escape.
+    `actions._releasing` is the free action now, offered per creature held,
+    and it ends the hold rather than only its relation. So *"command it to
+    cease"* is the wearer spending a free action, which is what the page
+    says it is, and needs nothing from this row.
+
+    **One clause is still relief from a cost the engine does not charge**,
+    and that is the engine's shortfall rather than this row's: *"you no
+    longer need to... remain adjacent"*. Moving away is supposed to end a
+    grab (PHB page 290) and nothing here does it, so the adjacency half
+    gives nothing. `#1595` holds it, and the day it lands this clause
+    starts meaning something without this row changing.
+
+    So what a player sees is the printed relief, bought at the printed
+    cost, resisted with the wearer's own defences as printed, endable at
+    will as printed, and ending on an escape.
     """
     victim = c.target
     if victim is None:

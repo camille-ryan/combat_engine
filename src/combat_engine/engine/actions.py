@@ -153,6 +153,7 @@ def legal(
     out.extend(_trading(world, encounter, actor))
     out.extend(_mounting(world, encounter, actor))
     out.extend(_picking(world, encounter, actor))
+    out.extend(_releasing(world, encounter, actor))
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
     out.extend(_wielding(world, encounter, actor))
@@ -2711,6 +2712,36 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _releasing(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """*"You can end a grab as a free action."* PHB page 290, and the action
+    summary on page 289 lists **End a grab -- Let go of an enemy** under
+    FREE ACTIONS.
+
+    **The other half of the printed Sustaining a Grab bullet**, and until now
+    the engine had neither half of the grabber's side: `escape.py` clearing
+    `GRABBED_BY` on a won escape check was the **only** place a grab ever
+    ended. The page gives four ends and this is the second of them; the other
+    two -- a release when a condition bars the grabber's opportunity actions,
+    and a release on moving away -- are `#1595` and are not built here.
+
+    Offered **per creature held**, so a grabber holding two lets go of one
+    and keeps the other. `targets` carries which, because `subject` is an
+    effect id elsewhere in this file and a victim is not one.
+
+    Found by chasing `i2393p1`, whose *"until you command it to cease"* had
+    no door at all.
+    """
+    out: list[Action] = []
+    if not encounter.can_spend(actor, ActionType.FREE):
+        return out
+    for victim in sorted(world.relations.targets(Relation.GRABBED_BY, actor)):
+        out.append(Action(
+            kind="release_grab", cost=ActionType.FREE,
+            targets=(victim,), ref="release_grab",
+        ))
+    return out
+
+
 def _sustaining(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Keeping a sustained effect going, deliberately.
 
@@ -4568,6 +4599,38 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             world.despawn(action.subject)
         return True
 
+    if action.kind == "release_grab":
+        victim = action.targets[0] if action.targets else None
+        if victim is None:
+            return False
+        # **End the hold, not just the relation**, which is the one place
+        # this differs from how `escape.py` lets go. A grab is an `Effect`
+        # carrying `relations=[(GRABBED_BY, holder, who)]` and a
+        # `sustain_cost`; clearing the relation alone leaves that effect
+        # live, so `_sustaining` would go on offering to sustain a grab that
+        # no longer exists while `_releasing` stopped offering to end it.
+        # Ending the effect tears the relation down with it.
+        #
+        # The relation is cleared directly as a fallback, for a grab a row
+        # laid by hand rather than through `c.grab` -- 21 content sites set
+        # relations themselves.
+        held = next(
+            (
+                e for e in world.effects.live.values()
+                if str(e.label).endswith("grab")
+                and e.owner == victim
+                and e.source == actor
+            ),
+            None,
+        )
+        if held is not None:
+            world.effects.end(held, "released")
+        else:
+            world.relations.clear(
+                Relation.GRABBED_BY, actor, victim, "released",
+            )
+        world.bus.emit(Note(text=f"{actor} lets go of {victim}"))
+        return True
     if action.kind == "drop":
         eff = world.effects.live.get(action.subject or -1)
         if eff is None:

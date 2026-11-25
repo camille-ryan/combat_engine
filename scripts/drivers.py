@@ -137942,6 +137942,110 @@ def an_aura_drives_an_affected_creature_out_on_its_turn(out: Result) -> None:
              f"{was} unchanged")
 
 
+def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
+    """*"You can end a grab as a free action."* PHB page 290, and page 289
+    lists **End a grab -- Let go of an enemy** under FREE ACTIONS.
+
+    **A grab used to end exactly one way and the page gives four.**
+    `escape.py` clearing `GRABBED_BY` on a won escape check was the only
+    site in the engine that ever released one; the page also gives the
+    grabber a free action, a release when a condition bars its opportunity
+    actions, and a release on moving away. This is the second of the four.
+    The other two are `#1595` and are deliberately not built here -- the
+    moving-away rule reaches `movement.py` and would move `replay`.
+
+    **The hold is ended, not just the relation, and that is the arm worth
+    reading.** A grab is an `Effect` carrying
+    `relations=[(GRABBED_BY, holder, who)]` **and** a `sustain_cost`.
+    Clearing the relation alone -- which is what `escape.py` does -- leaves
+    that effect live, so `_sustaining` would go on offering to sustain a
+    grab that no longer exists while `_releasing` stopped offering to end
+    it. The `hold is no longer live` arm is what fails if somebody
+    simplifies this to a `relations.clear`.
+
+    **Per victim, not per grabber.** A creature holding two lets go of one
+    and keeps the other, which is the arm that would pass vacuously on a
+    board with a single grab -- so this stages two.
+
+    Found by chasing `i2393p1`, whose *"until you command it to cease"* had
+    no door at all.
+    """
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.types import ActionType
+
+    world, me, _ev = _board("i2393p1", 1)
+    c = Cast(world=world, me=me, ref="drivers:release")
+    foes = query.enemies(world, me)
+
+    def offers() -> list:
+        return [a for a in _actions.legal(world, world.encounter, me)
+                if a.kind == "release_grab"]
+
+    out.that(len(foes) >= 2,
+             "the board fields two foes -- the premise, since the per-victim"
+             " arm needs a grabber holding two",
+             f"foes={len(foes)}")
+    if len(foes) < 2:
+        return
+
+    out.that(not offers(),
+             "CONTROL: a creature holding nobody is offered no release --"
+             " the offer is not unconditional",
+             f"{offers()}")
+
+    first = c.grab(on=foes[0])
+    out.that(first is not None and c.grabbing() == [foes[0]],
+             "the premise for everything below: the grab lands and"
+             " `c.grabbing` reports it",
+             f"effect={getattr(first, 'id', None)} grabbing={c.grabbing()}")
+    if first is None:
+        return
+
+    menu = offers()
+    out.that(len(menu) == 1
+             and menu[0].cost is ActionType.FREE
+             and menu[0].targets == (foes[0],),
+             "one release is offered, as a FREE action, naming the creature"
+             " held -- the printed cost and the printed scope",
+             f"n={len(menu)}"
+             f" cost={menu[0].cost if menu else None}"
+             f" targets={menu[0].targets if menu else None}")
+    if not menu:
+        return
+
+    second = c.grab(on=foes[1])
+    out.that(second is not None and len(offers()) == 2,
+             "a grabber holding TWO is offered two releases, one per victim",
+             f"grabbing={c.grabbing()} offers={len(offers())}")
+
+    # let go of the first and keep the second
+    one = [a for a in offers() if a.targets == (foes[0],)]
+    out.that(bool(one),
+             "the release naming the first victim is still on the menu --"
+             " the premise for the arm below",
+             f"{[a.targets for a in offers()]}")
+    if not one:
+        return
+    did = _actions.perform(world, world.encounter, me, one[0])
+    out.that(did and foes[0] not in c.grabbing(),
+             "performing it lets go of that creature",
+             f"performed={did} grabbing={c.grabbing()}")
+    out.that(foes[1] in c.grabbing(),
+             "and the OTHER grab survives -- per victim, not a blanket"
+             " release, which a one-grab board could not tell apart",
+             f"grabbing={c.grabbing()}")
+    out.that(first.id not in world.effects.live,
+             "the hold itself is ended rather than only its relation --"
+             " otherwise `_sustaining` keeps offering to sustain a grab that"
+             " no longer exists",
+             f"live={first.id in world.effects.live}")
+    out.that([a.targets for a in offers()] == [(foes[1],)],
+             "and the menu now offers exactly the one that is left",
+             f"{[a.targets for a in offers()]}")
+
+
 def a_creature_with_no_land_speed_moves_by_flying(out: Result) -> None:
     """A block printing *"Speed 0, fly 6"* moves by flying, and did not move
     at all.
@@ -141832,6 +141936,11 @@ DRIVERS = {
         an_aura_drives_an_affected_creature_out_on_its_turn,
         "i3305p1 drives an affected creature out of its aura on that"
         " creature's turn, and leaves it alone when no route exists",
+    ),
+    "release_grab": (
+        a_grabber_can_let_go_as_a_free_action,
+        "a grabber can let go as a free action, per victim, ending the"
+        " hold and not only its relation (#1595)",
     ),
     "flier_speed": (
         a_creature_with_no_land_speed_moves_by_flying,

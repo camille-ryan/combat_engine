@@ -220,6 +220,15 @@ def features(
     f["is_shift"] = float(action.kind == "shift")
     f["is_charge"] = float(action.kind == "charge")
     f["is_sustain"] = float(action.kind == "sustain")
+    # **Named on the day the kind was added**, which is what the comment
+    # below asks for and what `drivers.kinds_named` caught the moment the
+    # offer landed. Letting go of a grabbed enemy is free and almost always
+    # wrong -- a grabber has paid an attack for the hold and the victim is
+    # immobilised while it lasts -- so this exists to be *scored*, not to
+    # be offered and then decided by `i_am_bloodied`. The cases where it is
+    # right are narrow and real: a grabber that wants to walk away, and one
+    # about to be dazed.
+    f["is_release_grab"] = float(action.kind == "release_grab")
     f["is_drop"] = float(action.kind == "drop")
     f["is_item"] = float(action.kind == "item")
     f["is_instinctive"] = float(action.kind == "instinctive")
@@ -986,6 +995,21 @@ WEIGHTS: dict[str, float] = {
     # Letting go of a grab, and spending a one-shot: both are situational
     # and neither should be an idle default.
     "is_drop": -2.0,
+    # **The real thing this comment was describing.** Until `#1595` there
+    # was no action for letting go of a grab at all -- `escape` was a
+    # grab's only end -- so `is_drop` stood in for it in prose while
+    # scoring something else. `actions._releasing` is the printed free
+    # action now, and it gets the same number for the same reason the line
+    # above gives: a grabber has paid an attack for the hold and the
+    # victim is immobilised while it lasts, so releasing is situational
+    # and must not become an idle default.
+    #
+    # Level with `is_drop` **deliberately rather than guessed**: that entry
+    # is calibrated and its comment already names this action, so reusing
+    # the number invents nothing. If it turns out to want its own
+    # magnitude, that is a `scorecard` question and therefore AI-policy
+    # work.
+    "is_release_grab": -2.0,
     "is_item": 1.0,
     # Bending down in a fight, which is worth it only when you are
     # standing there empty-handed -- so the flat cost is real and
