@@ -80,6 +80,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    Ability,
     ActionType,
     Attack,
     AttackRolled,
@@ -108,6 +109,7 @@ from combat_engine.engine import (
     When,
     Window,
     World,
+    ZoneEntered,
     about_me,
     both,
     by_me,
@@ -1938,7 +1940,7 @@ def i1438p2(c: Cast) -> None:
 
 @power("i1481p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(10), target=NO_TARGET, keywords=[Keyword.CONJURATION],
-       dropped=("c.zone_toll(check=, fail=)",))
+       )
 def i1481p1(c: Cast) -> None:
     """A wall is raised and made difficult; the thorns are the gap.
 
@@ -1990,8 +1992,59 @@ def i1481p1(c: Cast) -> None:
 
     So being a singleton is no longer a reason to leave this, and the
     marker means plainly what it says: owed, not out of scope. The three
-    pieces above are what it is owed. #1565."""
-    c.wall(8, difficult=True, solid=False, until=When.EONT, sustain=MINOR, height=4)
+    pieces above are what it is owed. #1565.
+
+    **Written 2026-11-25, and two of the three pieces turned out not to be
+    engine work at all.** The scope first derived was four files, two of
+    them core; it is one engine addition and a watch.
+
+    * **The gate on *attempting* to enter.** Not `movement.py`. The wall is
+      `solid=False`, so a creature may walk into its squares and the zone
+      laid over them emits `ZoneEntered`, which **431 content sites**
+      already watch. A real move emits exactly one per entry, measured; an
+      earlier probe that saw two had moved the creature through
+      `Grid.place` and left `Zones.inside` unaware of it -- the
+      `audit._stand_off` mistake one layer up.
+    * **The check.** `c.ability_check(Ability.STR, 20)` -- a *Strength*
+      check and not Athletics, which is what the card prints and what that
+      verb exists to keep apart. `purpose="push through"` so a rule can
+      tell this roll from any other the move provokes.
+    * **The restraint.** The only engine piece, and **not a new `When`
+      rung**, which was the first instinct and was wrong: the wall lasts to
+      the end of the caster's next turn, so the restraint is bounded by the
+      wall already and *"escape DC 20 ends"* is an **early out**.
+      `c.condition(escape_dc=)` threads the number onto the hold, and
+      `escape.fastened` reaches a hold that has one and names **no
+      grabber** -- which is why this card cannot borrow the trick the six
+      monster powers printing an escape-ends duration use, where a creature
+      has swallowed you and `holders` finds the pair. `c.wall` returns the
+      *zone*, and a `Barrier` entity stands there only when the wall has
+      hit points; this one has none.
+
+    `difficult=True` is **gone**. It was a stand-in toll -- two squares of
+    movement for one, which the old note called "strictly less than print"
+    and "a one-word change if it is the wrong one". The printed toll is a
+    check, and charging both would charge twice for one sentence.
+
+    **`drivers.wall_of_thorns` is two independent groups and that is a
+    measurement, not tidiness.** The toll and the escape *offer* cannot be
+    driven in one sequence here: reaching the victim's own turn takes five
+    or more `advance` calls and the wall is one round long, so it expires
+    before that creature is ever up. That is the card. So the toll is
+    driven where the wall is live and the offer against a hold laid while
+    the victim holds the clock."""
+    zone = c.wall(8, solid=False, until=When.EONT, sustain=MINOR, height=4)
+
+    def thorns(ev: ZoneEntered) -> None:
+        if ev.zone != zone:
+            return
+        if c.ability_check(Ability.STR, 20, who=ev.actor, purpose="push through"):
+            return
+        c.condition(
+            Condition.RESTRAINED, on=ev.actor, until=When.EONT, escape_dc=20,
+        )
+
+    c.watch(ZoneEntered, thorns, until=When.EONT)
 
 
 @power("i1597x1", level=9, cls=ITEM, action=ActionType.NONE,

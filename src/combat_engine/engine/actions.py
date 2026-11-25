@@ -3238,9 +3238,14 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # `_granted` road `stand` above takes, because "you can use the escape
     # action as a minor action" is a printed line and a constant here left
     # it nowhere to go.
-    from .escape import grabbed
+    from .escape import fastened, grabbed
 
-    if grabbed(world, actor):
+    # **Or held fast by something with no grabber** -- a hold carrying an
+    # `escape_dc` that names no `GRABBED_BY` pair, which is `i1481p1`'s
+    # wall of thorns. Offered through the same door so the cost, the
+    # granted-word road and the `Escaped` event are all shared: a row
+    # watching for an escape must not have to know which kind it was.
+    if grabbed(world, actor) or fastened(world, actor) is not None:
         costs = {ActionType.MOVE} | {
             cost for (what, cost) in _granted(world, actor) if what == "escape"
         }

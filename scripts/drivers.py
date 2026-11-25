@@ -137942,6 +137942,196 @@ def an_aura_drives_an_affected_creature_out_on_its_turn(out: Result) -> None:
              f"{was} unchanged")
 
 
+def a_wall_of_thorns_charges_a_toll_and_holds_what_fails(out: Result) -> None:
+    """`i1481p1`: *"A creature that attempts to move through the wall must
+    succeed on a DC 20 Strength check or become restrained within the wall
+    (escape DC 20 ends)."*
+
+    **Three printed pieces, and only one was engine work.** The gate on
+    attempting to enter is `ZoneEntered` -- the wall is `solid=False`, so a
+    creature walks into its squares and the zone over them announces it,
+    which 431 content sites already watch. The check is
+    `c.ability_check(Ability.STR, 20)`, a *Strength* check and not
+    Athletics. The restraint is the new part: `c.condition(escape_dc=)`
+    puts a number on the hold and `escape.fastened` reaches a hold that
+    carries one and names **no grabber**.
+
+    Six of the seven cards printing an escape-ends duration are monster
+    powers where a creature has swallowed or pinned you, so a `GRABBED_BY`
+    pair exists and `escape.holders` finds it. `c.wall` returns the *zone*,
+    and a `Barrier` entity stands there only when the wall has hit points
+    -- this card's has none, so everything below `holders` was unreachable.
+
+    **Two independent groups, deliberately, and the reason is a
+    measurement.** The toll and the escape *offer* cannot be tested in one
+    sequence on this board: reaching the victim's own turn takes five or
+    more `advance` calls, and the wall is `until=When.EONT` -- one round --
+    so it expires before that creature is ever up. That is the card, not a
+    fault. So the toll is driven where the wall is live, and the offer is
+    driven against a hold laid while the victim holds the clock.
+
+    The move goes through `movement.walk`: an earlier probe used
+    `Grid.place` and saw `ZoneEntered` fire **twice**, because
+    `Zones.inside` never learnt about the creature and the next real move
+    registered an entry. `audit._stand_off`'s correction, one layer up.
+    """
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import escape, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import ZoneEntered
+    from combat_engine.engine.movement import walk
+    from combat_engine.engine.types import ActionType, Condition
+
+    ROW = "i1481p1"
+
+    # ---- group one: the toll, where the wall is live -------------------
+    world, me, _ev = _board(ROW, 1)
+    c = Cast(world=world, me=me, ref=ROW)
+    REGISTRY[ROW].body(c)
+
+    zones = world.zones.all()
+    out.that(bool(zones),
+             "the row lays a zone -- the premise, since the toll hangs on"
+             " entering it",
+             f"{len(zones)}")
+    if not zones:
+        return
+    zid, zone = zones[-1]
+    sqs = sorted(zone.squares)
+    out.that(not (set(sqs) & set(world.grid.blocking)),
+             "the wall does NOT block its own squares -- `solid=False`, so a"
+             " creature may attempt to move through it, which is the whole"
+             " printed sentence. Shipped `solid=True` once and a 7-square"
+             " wall admitted 0 of them",
+             f"{len(sqs)} squares,"
+             f" {len(set(sqs) & set(world.grid.blocking))} blocking")
+
+    foe = query.enemies(world, me)[0]
+    target = sqs[0]
+    start = (target[0] - 1, target[1])
+    spot = world.get(foe, Position)
+    placed = False
+    if spot is not None and world.grid.inside(start) \
+            and world.grid.occupant(start) in (None, foe):
+        world.grid.lift(foe)
+        spot.square = start
+        world.grid.place(foe, frozenset({start}))
+        placed = True
+    out.that(placed and not c.is_(Condition.RESTRAINED, on=foe),
+             "a foe stands beside a wall square and is not already"
+             " restrained -- the premise, or the arms below read somebody"
+             " else's effect",
+             f"placed={placed} {start} -> {target}")
+    if not placed:
+        return
+
+    mark = len(world.bus.log)
+    walk(world, foe, [target])
+    fired = [e for e in world.bus.log[mark:] if isinstance(e, ZoneEntered)]
+    out.that(len(fired) == 1 and fired[0].zone == zid,
+             "walking in announces the entry exactly ONCE, through"
+             " `movement.walk` -- a grid-level move leaves `Zones.inside`"
+             " unaware and the next real move announces a second",
+             f"{[(e.zone, e.actor) for e in fired]}")
+
+    # **The arm that proves the toll CHARGED, which the implication below
+    # cannot.** The first draft asserted only that restrained and escapable
+    # travel together -- true of a row with no check at all, both sides
+    # being False -- and a plant that deleted the check entirely stayed
+    # green. The roll itself is the evidence: `c.ability_check` announces
+    # the same `SkillCheck` every skill check does, and `purpose` is what
+    # tells this one from any other the walk might have provoked.
+    rolled = [
+        e for e in world.bus.log[mark:]
+        if type(e).__name__ == "SkillCheck"
+        and getattr(e, "purpose", "") == "push through"
+    ]
+    out.that(len(rolled) == 1,
+             "entering the wall rolls the printed check exactly once -- the"
+             " toll is charged for trying, which is what the card asks and"
+             " what `difficult=True` stood in for before",
+             f"{[(getattr(e, 'skill', '?'), getattr(e, 'dc', '?')) for e in rolled]}")
+    out.that(all(getattr(e, "dc", 0) == 20 for e in rolled),
+             "against the printed DC 20, not a derived one",
+             f"{[getattr(e, 'dc', None) for e in rolled]}")
+
+    caught = escape.fastened(world, foe)
+    out.that(c.is_(Condition.RESTRAINED, on=foe) == (caught is not None),
+             "and restrained and escapable travel together -- the check"
+             " either held the creature and left something to escape from,"
+             " or did neither. An implication, because a d20 decides which"
+             " -- the arms above are what make it non-vacuous",
+             f"restrained={c.is_(Condition.RESTRAINED, on=foe)}"
+             f" escapable={caught is not None}")
+    if caught is not None:
+        out.that(caught.escape_dc == 20,
+                 "the hold carries the PRINTED escape DC rather than the"
+                 " caster's defences -- `escape` reads a printed number"
+                 " first, so whose hold it is cannot change the difficulty",
+                 f"{caught.escape_dc}")
+        # **Asserted on `fastened`, not on `grabbed`.** The first draft read
+        # `not escape.grabbed(...)`, which is true of this board whatever
+        # `fastened` does -- and a plant that made `fastened` claim grabs
+        # too sailed through it. The question is whether `fastened` refuses
+        # an effect that names a pair, so a grabbed creature is the subject.
+        g_world, g_me, _g = _board(ROW, 1)
+        g_foe = query.enemies(g_world, g_me)[0]
+        Cast(world=g_world, me=g_me, ref="drivers:grab").grab(on=g_foe, dc=15)
+        out.that(escape.grabbed(g_world, g_foe)
+                 and escape.fastened(g_world, g_foe) is None,
+                 "a GRABBED creature with an escape DC is `holders`'"
+                 " business and `fastened` refuses it -- the two must not"
+                 " both claim one effect, or a creature rolls twice against"
+                 " it",
+                 f"grabbed={escape.grabbed(g_world, g_foe)}"
+                 f" fastened={escape.fastened(g_world, g_foe)}")
+
+    # ---- group two: the offer, against a creature that holds the clock --
+    w2, me2, _e2 = _board(ROW, 1)
+    c2 = Cast(world=w2, me=me2, ref=ROW)
+    victim = query.enemies(w2, me2)[0]
+    for _ in range(12):
+        if w2.turn == victim:
+            break
+        w2.encounter.advance()
+    out.that(w2.turn == victim,
+             "the clock reaches a foe -- the premise for the offer, since"
+             " `can_spend` refuses anybody whose turn it is not",
+             f"{w2.turn}")
+    if w2.turn != victim:
+        return
+
+    w2.effects.apply(victim, me2, When.EONT, label=ROW,
+                     conditions=(Condition.RESTRAINED,), escape_dc=20)
+    out.that(escape.fastened(w2, victim) is not None
+             and not escape.grabbed(w2, victim),
+             "a hold with an escape DC and no grabber is what `fastened`"
+             " finds, and `holders` does not",
+             "")
+    offers = [a for a in _actions.legal(w2, w2.encounter, victim)
+              if a.kind == "escape"]
+    out.that(len(offers) == 1 and offers[0].cost is ActionType.MOVE,
+             "the escape action is offered at the printed move cost for a"
+             " hold nobody is holding -- the half `actions` had gated on"
+             " `grabbed` alone",
+             f"n={len(offers)} cost={[str(a.cost) for a in offers]}")
+
+    won = escape.attempt(w2, victim, auto=True)
+    left = [e for e in w2.effects.live.values()
+            if e.owner == victim and e.label == ROW and not e.ended]
+    out.that(won and not left,
+             "and escaping ends the hold itself rather than only lifting a"
+             " condition, so nothing is left for a second escape to find",
+             f"won={won} still={[e.id for e in left]}")
+    out.that(not c2.is_(Condition.RESTRAINED, on=victim),
+             "so the creature is free -- the condition rode the hold and"
+             " came off with it",
+             "")
+
+
 def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
     """*"You can end a grab as a free action."* PHB page 290, and page 289
     lists **End a grab -- Let go of an enemy** under FREE ACTIONS.
@@ -141936,6 +142126,11 @@ DRIVERS = {
         an_aura_drives_an_affected_creature_out_on_its_turn,
         "i3305p1 drives an affected creature out of its aura on that"
         " creature's turn, and leaves it alone when no route exists",
+    ),
+    "wall_of_thorns": (
+        a_wall_of_thorns_charges_a_toll_and_holds_what_fails,
+        "i1481p1 charges a printed check for entering its wall and holds"
+        " what fails it until an escape (#1565)",
     ),
     "release_grab": (
         a_grabber_can_let_go_as_a_free_action,

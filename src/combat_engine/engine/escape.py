@@ -54,6 +54,42 @@ def grabbed(world: World, eid: int) -> bool:
     return bool(holders(world, eid))
 
 
+def fastened(world: World, eid: int):  # noqa: ANN201
+    """The hold this creature could escape from that **nobody is holding**.
+
+    *"Restrained within the wall (escape DC 20 ends)"* -- `i1481p1`. Seven
+    cards print an escape-ends duration; **six** are monster powers where a
+    creature has swallowed or pinned you, so a `GRABBED_BY` pair exists and
+    `holders` finds it. This one is a wall of thorns: `c.wall` returns the
+    *zone*, and a `Barrier` entity stands there only when the wall has hit
+    points, which this card's does not. So there is nothing to be the
+    grabber and everything below `holders` was unreachable.
+
+    **Not a new `When` rung**, which was the first instinct and is wrong:
+    the wall lasts until the end of its caster's next turn, so the restraint
+    is bounded by the wall already and *"escape ends"* is an **early out**
+    rather than a duration. `Effect.escape_dc` has carried the number all
+    along; what was missing was a way to reach a hold that has one without a
+    pair naming it.
+
+    The largest DC wins if a creature is caught in two, the same way
+    `_printed_dc` resolves and for its stated reason: a hold is never made
+    easier by an extra effect nobody asked about.
+    """
+    best = None
+    for eff in world.effects.live.values():
+        if eff.ended or not eff.escape_dc or eff.owner != eid:
+            continue
+        # A grab is `holders`' business. This is only for a hold whose
+        # escape DC names no pair, so the two paths cannot both claim one
+        # effect and roll twice against it.
+        if any(kind is Relation.GRABBED_BY for kind, _s, _t in eff.relations):
+            continue
+        if best is None or eff.escape_dc > best.escape_dc:
+            best = eff
+    return best
+
+
 def _printed_dc(world: World, eid: int, holder: int) -> int:
     """The DC this particular hold prints, or 0 for "read it off the grabber".
 
@@ -107,7 +143,35 @@ def attempt(
     """
     held = holders(world, eid)
     if not held:
-        return False
+        # **A hold with an escape DC and nobody holding it.** See
+        # `fastened`: a wall of thorns has no grabber to name, so the whole
+        # of this function was unreachable for it. Resolved here rather
+        # than in a second entry point so the check, its `purpose` and the
+        # `Escaped` event are the same ones every other escape emits -- a
+        # row watching for an escape must not have to know which kind it
+        # was.
+        caught = fastened(world, eid)
+        if caught is None:
+            return False
+        picked = skill if skill in SKILLS else _best(world, eid)
+        ctx = {"actor": eid, "holder": caught.source, "skill": picked}
+        won = True
+        if not auto:
+            won = bool(check(
+                world, eid, picked, dc=caught.escape_dc, purpose="escape",
+                bonus=bonus + _mods(world, eid, "escape", ctx),
+            ))
+        if won:
+            from .cast import Cast
+            world.effects.end(caught, "escaped")
+            Cast(world=world, me=eid, ref="escape").shift(1)
+        # `holder` is whoever laid the hold, which is the honest answer and
+        # keeps the event's shape: there is no grabber, and `0` would read
+        # as entity zero rather than as "nobody".
+        world.bus.emit(Escaped(
+            actor=eid, holder=caught.source, skill=picked, success=won,
+        ))
+        return won
     who = holder if holder in held else held[0]
     picked = skill if skill in SKILLS else _best(world, eid)
     ctx = {"actor": eid, "holder": who, "skill": picked}

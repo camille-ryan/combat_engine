@@ -9392,6 +9392,7 @@ class Cast:
         save_mod: int = 0,
         ongoing: tuple[int, DamageType] | None = None,
         escalate: Callable[[Effect], None] | None = None,
+        escape_dc: int = 0,
     ) -> Effect | None:
         """Apply one or more conditions for a duration.
 
@@ -9412,6 +9413,13 @@ class Cast:
             save_mod=save_mod,
             ongoing=ongoing,
             escalate=escalate,
+            # **An escape ends it, which is not a duration.** *"Restrained
+            # within the wall (escape DC 20 ends)"* -- `i1481p1`. The hold
+            # still expires on its own `until`; this is an early out the
+            # victim can buy with the escape action, which `escape.fastened`
+            # reaches precisely because the number names no grabber. 0 is
+            # "no escape from this one", which is every other caller. #1565.
+            escape_dc=escape_dc,
             by=self.ref,
             # Which weapon the blow came through, for the three rows that
             # print "using this weapon". `power` on the event says which row
