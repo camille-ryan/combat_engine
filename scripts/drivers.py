@@ -101529,6 +101529,9 @@ def a_resistance_lasts_an_extra_round(out: Result) -> None:
     from combat_engine.engine.events import TurnEnd
 
     ROW = "i2323x1"
+    #: The resistance labels the DEALT character arrived with, filled by
+    #: `bare` and subtracted by `held`. See both for why this exists.
+    _dealt: set[str] = set()
 
     def ticks(world, who: int, n: int) -> None:  # noqa: ANN001
         """`n` of this creature's own turn ends."""
@@ -101551,24 +101554,58 @@ def a_resistance_lasts_an_extra_round(out: Result) -> None:
         the card waives the *insubstantial* halving alone, so the
         blanket resistance figure is deliberately zero and the halving
         is a separate flag. See its docstring.
+
+        **And it broke the same way a second time, which is why
+        `bare` now clears what the DEALT CHARACTER brought.**
+        Clearing two feats' markers (`f951`, `f1252`) put them in the
+        chargen draw, the draw moved, and the dealt character arrived
+        carrying three feat-granted resistances of its own --
+        `f3139`, `f3175`, `f3562`. Every absolute count here then read
+        three too many and 13 of 16 arms went red while the mechanic was
+        untouched: the delta was still exactly 1.
+
+        Excluding one more spelling would have bought the same bug a
+        third time, because the thing that moves is **the board's feat
+        pool**, not the vocabulary. Keying on the laying ref was tried
+        and is wrong too: three arms lay as a different power on purpose,
+        to show the clause reads the laying row's class.
+
+        So `bare` ends them instead, which is the same move it already
+        makes for the item's own watch and for the same reason -- this
+        rule is about one item re-clocking one resistance, and anything
+        the draw happened to bring is noise every absolute count here
+        would read as signal.
         """
         return [e for e in world.effects.of(who)
                 if str(e.label).endswith(" resist")
-                and " ignores " not in str(e.label)]
+                and " ignores " not in str(e.label)
+                and str(e.label) not in _dealt]
 
     def bare() -> tuple:
-        """The board with the ITEM'S OWN watch taken off.
+        """The board with the ITEM'S OWN watch -- and the dealt
+        character's own resistances -- taken off.
 
         `i2323x1` is `action=NONE`, so `audit.board` arms it -- and the
         first two arms below are about what an un-lengthened `When.EONT`
         resistance does. Measured without this: the "plain" hold
         survived two turn ends and `c.extend_effect` returned False
         because the item had already moved it.
+
+        **It also records what the DEALT CHARACTER brought**, in
+        `_dealt`, which `held` subtracts. Nothing is ended for it: three
+        arms below need this item's watch live and two need another
+        power's, so clearing effects to tidy the count breaks the arms
+        the count is for. `held`'s docstring has why. #1588.
         """
         world, me, _ = _board(ROW, 1)
         for eff in list(world.effects.of(me)):
             if eff.by == ROW:
                 world.effects.end(eff)
+        _dealt.clear()
+        _dealt.update(
+            str(e.label) for e in world.effects.of(me)
+            if str(e.label).endswith(" resist")
+        )
         return world, me
 
     # -- the rung itself, on its own clock's turn ---------------------------
@@ -137258,6 +137295,177 @@ def a_component_worn_raises_the_racial_temp_hp_and_not_the_heal(out: Result) -> 
              f"temp {untrait_temp} against a baseline of {base_temp}")
 
 
+def a_weapon_treated_as_double_grows_a_second_end(out: Result) -> None:
+    """`c.as_double_weapon`: `f951` and `f1252` give a weapon with no
+    printed second end two ends, each with its own die and properties.
+
+    Both cards print *"you can treat the <weapon> as a double weapon"* --
+    `f951` on `w3601` at 1d8 a side, `f1252` on `w3623` at 2d4 a side and
+    *"each end ... is a light blade"*. The weapons have **no printed
+    second end**, so it is minted from the card; the 11 printed doubles in
+    the `weapon` table cannot serve them. #1587.
+
+    **Staged, because the board deals neither weapon.** It is put into
+    `Gear.weapons` by hand and the premise arms below assert what it looks
+    like before anything runs -- two-handed, one copy, the printed group --
+    so a stage that failed silently cannot read as the verb working.
+
+    The reversal and both refusals are the arms that matter. A verb that
+    appended an end and could not take it back would leave a character
+    permanently two-weaponed after an encounter effect expired, and a verb
+    that re-ran on a printed double would give that character three ends.
+    """
+    from dataclasses import replace
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import Size  # noqa: F401
+    from combat_engine.weapons import printed
+
+    STAFF = "w3601"
+    CHAIN = "w3623"
+    table = printed()
+    out.that(STAFF in table,
+             "the printed weapon table carries w3601, or there is nothing"
+             " for the card to name",
+             f"{len(table)} printed weapon(s)")
+
+    def staged(which: str = STAFF):  # noqa: ANN202
+        """A board whose character carries that weapon and nothing else."""
+        world, me, _ = _board("f951", 1)
+        gear = world.need(me, Gear)
+        from combat_engine.engine.components import weapon_from_printed
+        arm = weapon_from_printed(which)
+        gear.weapons[:] = [arm]
+        gear.stowed.clear()
+        return world, me, gear
+
+    world, me, gear = staged()
+    before = gear.weapons[0]
+    out.that(len(gear.weapons) == 1,
+             "the staged character carries exactly one weapon, so a second"
+             " end below is the verb's doing and not the deal",
+             f"{len(gear.weapons)} weapon(s)")
+    out.that(before.hands == "two-handed",
+             "and it is printed two-handed, not double -- the premise the"
+             " card changes",
+             f"hands={before.hands!r}")
+    out.that("stout" not in before.properties
+             and "defensive" not in before.properties,
+             "and it prints neither property the card grants, so finding"
+             " them later is not the table's doing",
+             f"properties={sorted(before.properties)}")
+
+    c = Cast(world=world, me=me, ref="drv")
+    held = c.as_double_weapon(
+        STAFF, damage="1d8",
+        primary=frozenset({"defensive", "stout"}),
+        secondary=frozenset({"off-hand"}),
+        until=When.ENCOUNTER,
+    )
+    out.that(held is not None,
+             "the verb answers with an effect on a carried weapon",
+             f"returned {held!r}")
+
+    now = {w.ref: w for w in gear.weapons}
+    out.that(len(gear.weapons) == 2,
+             "the character now carries TWO weapons -- the weapon and its"
+             " minted second end",
+             f"{sorted(now)}")
+    out.that(now[STAFF].hands == "double",
+             "the named weapon is a double weapon, which is what"
+             " `c.wielding('double')` reads",
+             f"hands={now[STAFF].hands!r}")
+    out.that({"defensive", "stout"} <= set(now[STAFF].properties),
+             "the primary end gained both printed properties, unioned onto"
+             " what it already had rather than replacing it",
+             f"properties={sorted(now[STAFF].properties)}")
+    end = next(w for r, w in now.items() if r != STAFF)
+    out.that("off-hand" in end.properties,
+             "and the second end carries the off-hand property the card"
+             " gives it",
+             f"properties={sorted(end.properties)}")
+    out.that(end.damage == "1d8" and now[STAFF].damage == "1d8",
+             "both ends deal the printed 1d8",
+             f"primary {now[STAFF].damage}, second {end.damage}")
+    out.that(gear.off is not None and gear.off.ref == end.ref,
+             "`Gear.off` finds the second end, which is what makes it a"
+             " hand rather than a thing on the belt -- `c.as_weapon`'s"
+             " literal form stows what it appends and would fail this",
+             f"off={getattr(gear.off, 'ref', None)!r}")
+
+    # -- the union, on a weapon that HAS a printed property ----------------
+    #
+    # **`w3601` cannot test this and the first draft used it anyway.**
+    # The quarterstaff prints no properties, so unioning onto them and
+    # replacing them give the same answer, and the plant that swapped
+    # union for replace passed. `w3623` prints `reach`, which a replace
+    # would drop.
+    world1b, me1b, gear1b = staged(CHAIN)
+    out.that("reach" in gear1b.weapons[0].properties,
+             "the staged w3623 prints `reach`, which is what lets the arm"
+             " below tell a union from a replacement",
+             f"properties={sorted(gear1b.weapons[0].properties)}")
+    Cast(world=world1b, me=me1b, ref="drv").as_double_weapon(
+        CHAIN, damage="2d4", primary=frozenset({"stout"}),
+        secondary=frozenset({"off-hand"}),
+    )
+    kept = {w.ref: w for w in gear1b.weapons}[CHAIN]
+    out.that({"reach", "stout"} <= set(kept.properties),
+             "the primary end keeps its printed `reach` AND gains `stout`"
+             " -- the card adds to the weapon it names rather than"
+             " redefining it",
+             f"properties={sorted(kept.properties)}")
+
+    # -- the group half, which only f1252 prints ---------------------------
+    world2, me2, gear2 = staged()
+    Cast(world=world2, me=me2, ref="drv").as_double_weapon(
+        STAFF, damage="2d4", group="light blade",
+        primary=frozenset({"stout"}), secondary=frozenset({"off-hand"}),
+    )
+    out.that(all(w.group == "light blade" for w in gear2.weapons),
+             "with `group=` both ends become that group -- f1252 prints"
+             " 'each end of the spiked chain is a light blade'",
+             f"groups={[w.group for w in gear2.weapons]}")
+
+    # -- reversible --------------------------------------------------------
+    world3, me3, gear3 = staged()
+    c3 = Cast(world=world3, me=me3, ref="drv")
+    eff = c3.as_double_weapon(STAFF, damage="1d8",
+                              primary=frozenset({"stout"}),
+                              secondary=frozenset({"off-hand"}))
+    out.that(len(gear3.weapons) == 2, "two ends while it is standing")
+    world3.effects.end(eff, "drv: done")
+    out.that(len(gear3.weapons) == 1,
+             "ending the effect takes the second end away again -- without"
+             " this a character stays two-weaponed after an encounter"
+             " effect expires",
+             f"{[w.ref for w in gear3.weapons]}")
+    restored = gear3.weapons[0]
+    out.that(restored.hands == "two-handed"
+             and "stout" not in restored.properties,
+             "and the weapon is the printed profile again, not a copy with"
+             " the card's edits left on it",
+             f"hands={restored.hands!r} properties={sorted(restored.properties)}")
+
+    # -- both refusals -----------------------------------------------------
+    world4, me4, gear4 = staged()
+    gear4.weapons[:] = [replace(gear4.weapons[0], hands="double")]
+    out.that(Cast(world=world4, me=me4, ref="drv").as_double_weapon(
+                 STAFF, damage="1d8") is None,
+             "it REFUSES a weapon that is already double -- a printed"
+             " double has its second end in the table, and minting"
+             " another would give that character three ends")
+
+    world5, me5, gear5 = staged()
+    gear5.weapons.clear()
+    out.that(Cast(world=world5, me=me5, ref="drv").as_double_weapon(
+                 STAFF, damage="1d8") is None,
+             "and refuses when the creature is not carrying the weapon at"
+             " all, which is the case a card cannot pose and a plant can")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -140620,6 +140828,11 @@ DRIVERS = {
         a_component_worn_raises_the_racial_temp_hp_and_not_the_heal,
         "f443 raises p2485's temporary hit points per component worn,"
         " capped at Constitution, leaving the bloodied heal alone",
+    ),
+    "double_weapon": (
+        a_weapon_treated_as_double_grows_a_second_end,
+        "c.as_double_weapon gives a weapon with no printed second end two"
+        " ends, reversibly, and refuses a printed double",
     ),
     "vampire_weaknesses": (
         a_vampires_weaknesses_and_the_feat_that_lifts_them,

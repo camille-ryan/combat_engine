@@ -425,7 +425,7 @@ def f950(c: Cast) -> None:
 
 
 @power("f951", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_double_weapon()",))
+       reach=PERSONAL, target=SELF)
 def f951(c: Cast) -> None:
     """"You can treat the quarterstaff as a double weapon", both ends at
     1d8, the primary gaining defensive and stout and the secondary the
@@ -468,6 +468,12 @@ def f951(c: Cast) -> None:
     Shares the symbol with `f1252`, which prints the same sentence about
     a different weapon, so it moves for both or for neither.
     """
+    c.as_double_weapon(
+        "w3601", damage="1d8",
+        primary=frozenset({"defensive", "stout"}),
+        secondary=frozenset({"off-hand"}),
+    )
+
 
 
 @power("f910", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

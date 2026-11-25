@@ -696,8 +696,7 @@ def f1270(c: Cast) -> None:
 # opposite; see the module docstring for the measurement.
 
 
-@_trait("f1252", todo=("c.as_double_weapon()",),
-        proficiency=("w3623",))
+@_trait("f1252", proficiency=("w3623",))
 def f1252(c: Cast) -> None:
     """The proficiency lands: the weapon table carries this one and
     `chargen` deals it. What is left is the four sentences that make it a
@@ -737,6 +736,12 @@ def f1252(c: Cast) -> None:
 
     "Each end deals 2d4" needs nothing: that is `w3623`'s printed damage
     already."""
+    c.as_double_weapon(
+        "w3623", damage="2d4", group="light blade",
+        primary=frozenset({"stout"}),
+        secondary=frozenset({"off-hand"}),
+    )
+
 
 
 _swap("f1253", "f1253b")

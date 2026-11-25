@@ -11,6 +11,8 @@ Making an attack, and what the attack turns out to be.
   - "The triggering attack also hits the target."
 - `c.as_basic(self, *refs: 'str', window: 'str' = '', spent: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You can use <this row> in place of a melee basic attack."
+- `c.as_double_weapon(self, weapon: 'str', *, damage: 'str' = '', primary: 'frozenset[str]' = frozenset(), secondary: 'frozenset[str]' = frozenset(), group: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You can treat the <weapon> as a double weapon."
 - `c.as_implement(self, *, on: 'int | None' = None) -> 'None'`
   - This weapon counts as an implement for its wielder's powers.
 - `c.as_ranged(self, squares_: 'int' = 10, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, weapon: 'str' = '') -> 'Effect | None'`

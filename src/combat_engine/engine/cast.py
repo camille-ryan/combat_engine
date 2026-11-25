@@ -4891,6 +4891,119 @@ class Cast:
         effect.on_resume.append(rearm)
         return effect
 
+    def as_double_weapon(
+        self,
+        weapon: str,
+        *,
+        damage: str = "",
+        primary: frozenset[str] = frozenset(),
+        secondary: frozenset[str] = frozenset(),
+        group: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You can treat the <weapon> as a double weapon."
+
+        Two feats print this about weapons that have **no printed second
+        end** -- `f951` on a quarterstaff, `f1252` on a spiked chain --
+        giving each end's die and added properties in the card text. So
+        the end is minted from the card and never looked up, which is why
+        the 11 printed doubles in the `weapon` table cannot serve it.
+
+        **Not `c.as_weapon`, whose two halves each do something else.**
+        Its literal form appends a weapon and **stows** it -- correct for
+        a shield used as a pick, which is a second object you are not
+        holding -- and a double weapon's other end is in your other hand.
+        Its `base=` half replaces one profile with another, where this
+        card keeps the weapon and gives it a second end.
+
+        `damage` is both ends' die, because both cards give one number for
+        both. `group` likewise: `f1252` prints *"each end of the spiked
+        chain is a light blade"*, and an empty string keeps whatever the
+        weapon printed. `primary` and `secondary` are the properties each
+        end **gains** -- unioned onto the printed set rather than
+        replacing it, since the card adds to the weapon it names.
+
+        **`replace` rather than mutation**, and that is not a style
+        choice: `chargen.PRINTED` holds the canonical `Weapon` objects and
+        `Gear.weapons` may hold the very same object, so writing through
+        it would edit every character's copy of that weapon. Replacing the
+        list entry leaves the original untouched and makes the restore
+        exact -- the old object is closed over whole, the way
+        `Cast._reshape` does it.
+
+        `__post_init__` is what keeps `hands` and `properties` agreeing,
+        so passing `hands="double"` through `replace` is enough for
+        `c.wielding("double")` to answer on both ends.
+
+        **Refuses a weapon that is already double**, which is the one case
+        the cards cannot mean: the printed doubles have their second end
+        in the table, and minting another would give that character three
+        ends. Returns `None` there and when the creature is not carrying
+        the weapon at all -- the case a card cannot pose and a plant can.
+
+        The second end is **held, not stowed**, so `Gear.off` finds it and
+        the two-weapon readers work. #1587.
+        """
+        from dataclasses import replace
+
+        from .components import Gear
+
+        who = self.me if on is None else on
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        here = next(
+            (n for n, w in enumerate(gear.weapons) if w.ref == weapon), -1
+        )
+        if here < 0 or gear.weapons[here].hands == "double":
+            return None
+        was = gear.weapons[here]
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} makes {weapon} a double weapon", by=self.ref,
+        )
+        if effect is None:
+            return None
+        end = replace(
+            was,
+            ref=f"{weapon}:second",
+            damage=damage or was.damage,
+            group=group or was.group,
+            hands="double",
+            properties=frozenset(was.properties) | frozenset(secondary),
+        )
+        becomes = replace(
+            was,
+            damage=damage or was.damage,
+            group=group or was.group,
+            hands="double",
+            properties=frozenset(was.properties) | frozenset(primary),
+        )
+        gear.weapons[here] = becomes
+
+        def arm() -> None:
+            at = next(
+                (n for n, w in enumerate(gear.weapons) if w.ref == weapon), -1
+            )
+            if at >= 0:
+                gear.weapons[at] = becomes
+            if all(w.ref != end.ref for w in gear.weapons):
+                gear.weapons.append(end)
+
+        def lift() -> None:
+            at = next(
+                (n for n, w in enumerate(gear.weapons) if w.ref == weapon), -1
+            )
+            if at >= 0:
+                gear.weapons[at] = was
+            gear.weapons[:] = [w for w in gear.weapons if w.ref != end.ref]
+
+        arm()
+        effect.on_suspend.append(lift)
+        effect.on_resume.append(arm)
+        return effect
+
     def _reshape(
         self, gear: Any, who: int, base: str, until: When
     ) -> Effect | None:
