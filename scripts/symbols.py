@@ -251,7 +251,8 @@ CATEGORIES: dict[str, dict] = {
                 # mount do" would not think to look under either
                 # mechanism. #1341.
                 "lend_checks", "lend_defences",
-                "lose_mode", "mode", "mount", "move_companion",
+                "double_granted_move", "lose_mode", "mode", "mount",
+                "move_companion",
             ]),
         ],
     },

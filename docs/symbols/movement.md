@@ -128,6 +128,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
 
 ## modes and mounts
 
+- `c.double_granted_move(self, name: 'str', *, times: 'int' = 2, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - *"Double any climbing movement granted to you by powers."*
 - `c.lend_checks(self, *skills: 'str', to: 'int', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - *"The mount can make Acrobatics, Athletics, Endurance, or
 - `c.lend_defences(self, to: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

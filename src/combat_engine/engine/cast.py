@@ -174,6 +174,11 @@ MANOEUVRE_AID = "manoeuvre:aid"
 #: gates, the durations and `squares_for` all work unchanged -- the same
 #: arrangement `manoeuvre:` above uses for a number nobody could reach.
 MOVE_KIND = "move:"
+#: Reserved key for "a grant of this movement mode is multiplied". Kept
+#: beside `MOVE_KIND` for the same reason it exists: a prefix nothing else
+#: can collide with, so the gates, the durations and the removal all work
+#: unchanged. `Cast.double_granted_move` writes it and `Cast.mode` reads it.
+MODE_TIMES = "mode_times:"
 #: The bonus to the *check* an aid another action rolls, as against the bonus
 #: it hands out. Two different numbers on two cards that print both of them
 #: in one sentence -- "a +5 bonus to checks you make to aid another. When you
@@ -12372,6 +12377,19 @@ class Cast:
         moves = self.world.get(who, Movement)
         if moves is None:
             return None
+        # **A standing hold may double what a power grants.** *"Climb at
+        # normal speed and double any climbing movement granted to you by
+        # powers"* -- `i839p1` -- so the doubling has to meet the grant
+        # rather than the move. Read here because this is the one place a
+        # mode's number is written: `Movement.modes` is a plain dict with
+        # no modifier layer of its own, which is why `c.bonus` could not
+        # say it and the row sat marked.
+        #
+        # Measured before building it: **29** rows grant a climb speed
+        # through this verb and **none** grants climbing *squares*, so
+        # "climbing movement granted by powers" has exactly one referent
+        # in this tree and the old note's two readings collapse to this.
+        speed = speed * self._mode_multiplier(who, name)
         had = moves.modes.get(name)
         moves.modes[name] = max(speed, had or 0)
 
@@ -12384,6 +12402,51 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} {name}", on_end=[undo],
             by=self.ref,
+        )
+
+    def _mode_multiplier(self, who: int, name: str) -> int:
+        """How much a grant of this movement mode is multiplied by. 1 normally.
+
+        Kept as a multiplier rather than a flag so a second card printing
+        "triple" has somewhere to go, and read through `Mods` so it carries
+        a duration and comes off with the effect that laid it.
+        """
+        from .components import Mods
+
+        mods = self.world.get(who, Mods)
+        if mods is None or not mods.items:
+            return 1
+        return max(1, mods.total(f"{MODE_TIMES}{name}", {}))
+
+    def double_granted_move(
+        self, name: str, *, times: int = 2, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """*"Double any climbing movement granted to you by powers."*
+
+        `i839p1`. The doubling meets the **grant**, not the move, because
+        that is what the card says and because `Movement.modes` is a plain
+        dict: `c.mode` writes a number into it with no modifier layer, so
+        there was nothing for a `c.bonus` to raise and the row carried
+        `c.double_granted_move(mode=)` as its marker.
+
+        **It applies to grants made while this is up, and not to one
+        already standing.** A grant is an event, and the card doubles what
+        is granted *to you* rather than auditing what you already have --
+        so a row that wants to double its own grant has to lay this first.
+        `i839p1` deliberately does the opposite: *"climb at normal speed
+        **and** double any climbing movement granted"* is two clauses, and
+        its own climb is the normal-speed one.
+
+        `times` so a card printing "triple" needs no second verb; nothing
+        prints one today.
+
+        Defaults to the caster, like every movement verb beside it.
+        """
+        return self.bonus(
+            f"{MODE_TIMES}{name}", times,
+            on=on if on is not None else self.me,
+            until=until, kind=self.ref,
         )
 
     def lose_mode(

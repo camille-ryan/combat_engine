@@ -936,8 +936,7 @@ def i839x1(c: Cast) -> None:
 
 
 @power("i839p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.double_granted_move(mode=)",))
+       reach=PERSONAL, target=SELF)
 def i839p1(c: Cast) -> None:
     """Climbing at full speed is a movement mode at that speed; doubling
     climb movement somebody *else* grants is the half that is missing.
@@ -969,13 +968,20 @@ def i839p1(c: Cast) -> None:
     consults, not inventing a wildcard; the second is still the
     multiplier, since everything here **adds**.
 
-    And a keyword there may be the wrong house entirely. The clause reads
-    on either of two things a power grants -- a climb **speed**, which is
-    `c.mode` and is a plain `max()` into `Movement.modes` with no modifier
-    layer at all, or **squares** of climbing movement, which is
-    `squares_for`'s territory. 42 files in this tree grant a climb one way
-    or the other, so the clause has plenty to reach for; what it has
-    nowhere to say is "twice whatever that was, for this mode".
+    And a keyword there was the wrong house entirely, which a measurement
+    settled rather than a reading. The clause could have meant either of
+    two things a power grants -- a climb **speed**, which is `c.mode` and
+    is a plain `max()` into `Movement.modes` with no modifier layer at
+    all, or **squares** of climbing movement, which is `squares_for`'s
+    territory. Counted 2026-11-25:
+
+        a climb SPEED, through `c.mode("climb", ...)`      29 rows
+        climbing SQUARES, through `squares_for`             0
+
+    So *"climbing movement granted to you by powers"* has exactly **one**
+    referent in this tree, the ambiguity is not one, and the clause is
+    sayable at the grant. The `squares_for` half would have been a
+    multiplier where everything adds, for nothing to multiply.
 
     So the symbol names a facility rather than a parameter, and it took
     the `mode=` with it because a verb that doubled every grant would be
@@ -997,11 +1003,24 @@ def i839p1(c: Cast) -> None:
     **The prerequisite landed and is off the marker.**
     `query.mode_speed(world, eid, mode)` is the reader -- `#1591`, which
     came out of `query.speed` leaving 47 stat blocks unable to move -- so
-    `c.mode_speed("climb")`'s worth of distance is readable now and only
-    the **doubling** is left. It is still the harder half and the note
-    above still describes it: a wildcard for "any power", and a multiplier
-    where `squares_for` adds."""
+    `c.mode_speed("climb")`'s worth of distance is readable now.
+
+    **The doubling landed as `c.double_granted_move`, and it is smaller
+    than this note priced it.** It meets the **grant** -- `Cast.mode`
+    multiplies by whatever `mode_times:<mode>` stands at before writing
+    into `Movement.modes` -- so it needs neither the wildcard nor the
+    multiplier the paragraphs above were scoping. Those were both costs of
+    aiming at the *move* instead, and the count above is what showed the
+    move was the wrong place: nothing grants climbing squares, so there is
+    nothing on the movement path for a `climb` kind to intercept.
+
+    **Order is load-bearing here and is the card's own.** *"Climb at
+    normal speed **and** double any climbing movement granted to you by
+    powers"* is two clauses, so the doubling is laid **after** this row's
+    own grant and does not touch it -- otherwise the first clause would
+    read "climb at twice your speed", which is not what it says."""
     c.mode("climb", c.speed_of(), on=c.me, until=When.ENCOUNTER)
+    c.double_granted_move("climb", on=c.me, until=When.ENCOUNTER)
 
 
 # -- level 6 ----------------------------------------------------------------

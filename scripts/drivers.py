@@ -138236,6 +138236,145 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def a_doubled_climb_meets_the_grant_and_not_the_mover(out: Result) -> None:
+    """*"Climb at normal speed and double any climbing movement granted to
+    you by powers"* -- `i839p1`, and the doubling meets the **grant**.
+
+    The row's note had priced this as two pieces on the movement path: a
+    wildcard so "any power" is a key, and a multiplier where `squares_for`
+    adds. Both were costs of aiming at the *move*, and a count is what
+    showed the move is the wrong place -- **29** rows grant a climb speed
+    through `c.mode` and **none** grants climbing squares, so there is
+    nothing on the path for a `climb` kind to intercept. `Movement.modes`
+    is a plain dict with no modifier layer, which is why `c.bonus` could
+    not say this and the row sat marked.
+
+    Two things this rule is really guarding, because both are silent:
+
+    * **the row's own grant is not doubled.** The card is two clauses --
+      climb at *normal* speed, and double what others grant -- so the
+      order in the body is load-bearing. Getting it wrong reads as "climb
+      at twice your speed", which audits green and is stronger than print.
+    * **a grant already standing is not doubled retroactively.** A grant
+      is an event; the hold doubles what arrives while it is up. Nothing
+      else in the tree would notice the difference.
+
+    The `fly` arm is the control that matters: a hold keyed on one mode
+    must not raise another, which is the whole reason the key carries the
+    mode name rather than being a flag.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conditions, Movement
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+
+    ROW = "i839p1"
+    world, me, _ev = _board(ROW, 1)
+
+    # ---- the grant, with nothing standing ------------------------------
+    plain = world.spawn(Movement(speed=6, modes={}), Conditions())
+    Cast(world=world, me=plain, ref="probe").mode(
+        "climb", 4, on=plain, until=When.ENCOUNTER)
+    out.that(query.mode_speed(world, plain, "climb") == 4,
+             "with no hold up a granted climb speed is what the granting"
+             " row said -- the negative control, and the baseline every"
+             " other arm is measured against",
+             f"{query.mode_speed(world, plain, 'climb')}")
+
+    # ---- the hold up, then a grant -------------------------------------
+    held = world.spawn(Movement(speed=6, modes={}), Conditions())
+    hc = Cast(world=world, me=held, ref=ROW)
+    eff = hc.double_granted_move("climb", on=held, until=When.ENCOUNTER)
+    out.that(eff is not None,
+             "the verb lays an effect -- the premise, since everything"
+             " below reads a modifier it is supposed to have written",
+             f"{eff}")
+    Cast(world=world, me=held, ref="probe").mode(
+        "climb", 4, on=held, until=When.ENCOUNTER)
+    out.that(query.mode_speed(world, held, "climb") == 8,
+             "a climb speed granted while the hold is up is DOUBLED -- the"
+             " printed clause, and the whole of what the row was waiting"
+             " on",
+             f"{query.mode_speed(world, held, 'climb')}")
+
+    # ---- it is keyed on the mode, not a flag ---------------------------
+    Cast(world=world, me=held, ref="probe").mode(
+        "fly", 4, on=held, until=When.ENCOUNTER)
+    out.that(query.mode_speed(world, held, "fly") == 4,
+             "a FLY speed granted under a climb hold is untouched -- which"
+             " is why the key carries the mode name instead of being a"
+             " boolean",
+             f"{query.mode_speed(world, held, 'fly')}")
+
+    # ---- a standing grant is not raised retroactively ------------------
+    after = world.spawn(Movement(speed=6, modes={}), Conditions())
+    Cast(world=world, me=after, ref="probe").mode(
+        "climb", 4, on=after, until=When.ENCOUNTER)
+    Cast(world=world, me=after, ref=ROW).double_granted_move(
+        "climb", on=after, until=When.ENCOUNTER)
+    out.that(query.mode_speed(world, after, "climb") == 4,
+             "a climb ALREADY granted when the hold goes up stays where it"
+             " was -- a grant is an event, and the card doubles what is"
+             " granted to you rather than auditing what you hold",
+             f"{query.mode_speed(world, after, 'climb')}")
+
+    # ---- max() still wins over a doubled grant -------------------------
+    big = world.spawn(Movement(speed=6, modes={"climb": 10}), Conditions())
+    Cast(world=world, me=big, ref=ROW).double_granted_move(
+        "climb", on=big, until=When.ENCOUNTER)
+    Cast(world=world, me=big, ref="probe").mode(
+        "climb", 4, on=big, until=When.ENCOUNTER)
+    out.that(query.mode_speed(world, big, "climb") == 10,
+             "a doubled 4 does not LOWER a standing 10 -- `c.mode` takes"
+             " the larger, and the doubling raises what is offered rather"
+             " than replacing what is held",
+             f"{query.mode_speed(world, big, 'climb')}")
+
+    # ---- the multiplier is a number, not a doubling ---------------------
+    tri = world.spawn(Movement(speed=6, modes={}), Conditions())
+    Cast(world=world, me=tri, ref=ROW).double_granted_move(
+        "climb", times=3, on=tri, until=When.ENCOUNTER)
+    Cast(world=world, me=tri, ref="probe").mode(
+        "climb", 4, on=tri, until=When.ENCOUNTER)
+    out.that(query.mode_speed(world, tri, "climb") == 12,
+             "`times=3` triples, so a card printing 'triple' needs no"
+             " second verb -- nothing prints one today, which is why this"
+             " is a parameter and not a second key",
+             f"{query.mode_speed(world, tri, 'climb')}")
+
+    # ---- ending the hold ends the doubling -----------------------------
+    gone = world.spawn(Movement(speed=6, modes={}), Conditions())
+    off = Cast(world=world, me=gone, ref=ROW).double_granted_move(
+        "climb", on=gone, until=When.ENCOUNTER)
+    if off is not None:
+        world.effects.end(off, "probe")
+    Cast(world=world, me=gone, ref="probe").mode(
+        "climb", 4, on=gone, until=When.ENCOUNTER)
+    out.that(query.mode_speed(world, gone, "climb") == 4,
+             "the doubling comes off with the effect that laid it -- read"
+             " through `Mods` for exactly this, rather than a field on"
+             " `Movement` that nothing would clear",
+             f"{query.mode_speed(world, gone, 'climb')}")
+
+    # ---- the row itself ------------------------------------------------
+    c = Cast(world=world, me=me, ref=ROW)
+    walked = query.speed(world, me)
+    REGISTRY[ROW].body(c)
+    out.that(query.mode_speed(world, me, "climb") == walked,
+             "the row's OWN grant is NOT doubled -- it climbs at its land"
+             " speed, because 'climb at normal speed' and 'double any"
+             " granted' are two clauses and the order in the body says so",
+             f"{query.mode_speed(world, me, 'climb')} vs {walked}")
+    Cast(world=world, me=me, ref="probe").mode(
+        "climb", walked, on=me, until=When.ENCOUNTER)
+    out.that(query.mode_speed(world, me, "climb") == walked * 2,
+             "and a LATER grant from another power is doubled -- the"
+             " second clause, measured on the same creature so the first"
+             " arm cannot pass by the hold never having been laid",
+             f"{query.mode_speed(world, me, 'climb')}")
+
+
 def a_creature_with_no_land_speed_moves_by_flying(out: Result) -> None:
     """A block printing *"Speed 0, fly 6"* moves by flying, and did not move
     at all.
@@ -142136,6 +142275,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "doubled_climb": (
+        a_doubled_climb_meets_the_grant_and_not_the_mover,
+        "i839p1 doubles a climb speed another power GRANTS and leaves its"
+        " own normal-speed clause alone (#1572)",
     ),
     "flier_speed": (
         a_creature_with_no_land_speed_moves_by_flying,
