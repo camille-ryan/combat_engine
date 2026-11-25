@@ -570,7 +570,7 @@ def f3434(c: Cast) -> None:
 
 @power("f3435", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("dsl.Power.energy_types",))
+       todo=("etl.power.keywords(varies)",))
 def f3435(c: Cast) -> None:
     """One hold left, and the missing trigger is no longer it.
 
@@ -601,6 +601,46 @@ def f3435(c: Cast) -> None:
     declaring one per variable-energy power rather than one reader --
     not a single chokepoint, and the count is what would decide whether
     it is worth it. #1571.
+
+    **The count was taken and it moves the symbol a layer down, to
+    `etl.power.keywords(varies)`.** Not a header field to invent: a
+    keyword the page already prints and this build drops.
+
+    *"A variable energy type"* is a **printed keyword**, and it sits where
+    every damage-type keyword sits -- after the semicolon on the keyword
+    line. `p5848`'s reads `Daily Arcane , Implement ; Varies`. So the set
+    is identifiable from the card and needs nothing declared per row:
+
+        compendium Power rows carrying `Varies`       68
+          Sorcerer                                    16
+            Attack powers at level 1-10                5
+              p1163  p5848  p10319  p10321  p13425
+        the same powers in `game.db`'s `keywords`       0
+
+    Zero, because `etl/power.py`'s `_KEYWORDS` is a **whitelist** of 46
+    words and `varies` is not among them, so the keyword is dropped by
+    construction. One list entry is the whole fix.
+
+    **Two wrong answers on the way here, both worth recording.** First:
+    that the set lives in the bodies, which the paragraph above argues --
+    it reasoned from rows that *choose* a damage type and found 23 of
+    them, where this card is about one that **varies**, and those are
+    different printed things. Second, and mine: re-pointed briefly to
+    `cf:sorcerer-f0s3`, on the printed Prerequisite being the Wild Magic
+    class feature. That feature is indeed undeclared -- so is Dragon Soul,
+    and `cf:sorcerer-f0` names both -- but it is **not what blocks this
+    row**: `powers/sorcerer/__init__.py` established that the build *is*
+    dealt, `c.build("wild")` has always answered it, and eight rows hang
+    their Chaos Burst clause off exactly that. A missing class-feature row
+    read as a missing build there; it read as a missing prerequisite here.
+
+    So the trigger's two other halves are both satisfiable today --
+    `c.build("wild")` for the prerequisite, `_through_an_offered_aiming`
+    for the `f1028` melee -- and what is missing is only the keyword that
+    says which powers qualify. #1571.
+
+    Being an `etl.` symbol, this row now belongs with the ETL batch rather
+    than the tail, under `#1471`'s ruling.
     """
 
 
