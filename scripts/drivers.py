@@ -137942,6 +137942,97 @@ def an_aura_drives_an_affected_creature_out_on_its_turn(out: Result) -> None:
              f"{was} unchanged")
 
 
+def a_damage_line_can_name_a_rule_for_choosing_an_ability(out: Result) -> None:
+    """`Damage.bonus` takes a `Pick`, which is the damage side of what
+    `Attack.ability` has always taken.
+
+    `i1066p1`'s inline summon prints *"1d8 + your highest ability
+    modifier damage"*. A header cannot name the ability -- it is data
+    evaluated at import and the answer depends on who read the scroll --
+    so the line says the rule and `Attack.ability_for` answers it per
+    commander.
+
+    **The bug this closes was silent.** Written as a word,
+    `Cast._bonus_of` ran `Ability(bonus.lower())`, hit its `ValueError`
+    and returned **0**: the line was the dice and nothing, on a row that
+    audited as firing.
+
+    Measured through `Cast._bonus_of` -- the one reader a header's damage
+    bonus goes through, shared by `c.hit`, `c.command` and the crit
+    checks -- and the arms vary the **sheet** rather than the row, which
+    is the only way to show a rule being resolved rather than a constant
+    being returned.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Stats
+    from combat_engine.engine.dsl import REGISTRY, Damage, Pick
+    from combat_engine.engine.types import Ability
+
+    ROW = "i1066p1"
+    world, me, _ev = _board(ROW, 1)
+    c = Cast(world=world, me=me, ref=ROW)
+    stats = world.need(me, Stats)
+
+    out.that(REGISTRY[ROW] is not None, f"premise: {ROW} is declared")
+
+    def bonus_for(**scores: int) -> int:
+        """What the damage line pays with that sheet."""
+        for name, value in scores.items():
+            stats.scores[Ability(name)] = value
+        return c._bonus_of(Pick.HIGHEST)
+
+    # One clearly-highest score, then a different one, so the answer has
+    # to follow the sheet rather than sit on whichever it read first.
+    low = dict.fromkeys(("str", "con", "dex", "int", "wis", "cha"), 10)
+    by_str = bonus_for(**{**low, "str": 20})
+    out.that(by_str == stats.mod(Ability.STR),
+             "with Strength the best score, the line pays the Strength"
+             " modifier",
+             f"paid {by_str}, str mod {stats.mod(Ability.STR)}")
+
+    by_cha = bonus_for(**{**low, "cha": 20})
+    out.that(by_cha == stats.mod(Ability.CHA),
+             "and with Charisma the best, it pays Charisma -- so it is"
+             " resolving the rule per sheet and not returning a fixed"
+             " ability",
+             f"paid {by_cha}, cha mod {stats.mod(Ability.CHA)}")
+
+    # -- the silent zero this replaces ------------------------------------
+    out.that(c._bonus_of("highest ability") == 0,
+             "while the same phrase written as a STRING still pays 0 --"
+             " `Ability` has no such member, so `_bonus_of` catches the"
+             " `ValueError`. That is the silent failure a `Pick` exists"
+             " to avoid, and it is left alone rather than taught to guess"
+             " at prose",
+             "0")
+
+    # -- and a flat number is untouched -----------------------------------
+    # **Caught, so this FAILS rather than crashing.** Removing the int
+    # early-return makes `_bonus_of(3)` reach `bonus.lower()` and raise
+    # `AttributeError` -- which killed the whole run and printed no
+    # verdict at all, so the plant read as a pass until the absence of a
+    # verdict was noticed. An arm that crashes tells you less than one
+    # that fails.
+    def flat(value: int) -> object:
+        try:
+            return c._bonus_of(value)
+        except Exception as exc:
+            return f"{type(exc).__name__}: {exc}"
+
+    out.that(flat(3) == 3 and flat(0) == 0,
+             "a flat bonus is unchanged, which is what every monster's"
+             " printed damage uses -- the two cheap cases stay first so a"
+             " `Pick` costs nothing on a row that prints none",
+             f"3 -> {flat(3)!r}, 0 -> {flat(0)!r}")
+
+    # -- the row's own line carries it ------------------------------------
+    line = Damage("1d8", Pick.HIGHEST)
+    out.that(line.bonus is Pick.HIGHEST,
+             "and a `Damage` really holds the rule rather than coercing"
+             " it, so the header keeps what the card says",
+             f"{line.bonus!r}")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -141324,6 +141415,11 @@ DRIVERS = {
         an_aura_drives_an_affected_creature_out_on_its_turn,
         "i3305p1 drives an affected creature out of its aura on that"
         " creature's turn, and leaves it alone when no route exists",
+    ),
+    "damage_pick": (
+        a_damage_line_can_name_a_rule_for_choosing_an_ability,
+        "Damage.bonus takes a Pick, resolved per commander, where a"
+        " string paid 0 silently",
     ),
     "vampire_weaknesses": (
         a_vampires_weaknesses_and_the_feat_that_lifts_them,

@@ -108,6 +108,7 @@ from combat_engine.engine import (
     Melee,
     Miss,
     MoveEnd,
+    Pick,
     Position,
     PowerResolved,
     PowerUsed,
@@ -925,7 +926,21 @@ def i1066p1(c: Cast) -> None:
     command a standing summon**, so `c.command` has no door but the
     Instinctive Effect. 36 inline blocks share that."""
     c.summon_inline(
-        Summon(per_defence={"ac": 2, "fort": 2}, speed=0, modes={"fly": 6}),
+        Summon(
+            per_defence={"ac": 2, "fort": 2}, speed=0, modes={"fly": 6},
+            # *"your highest ability +4 vs. AC; 1d8 + your highest ability
+            # modifier damage"*. **`Pick.HIGHEST` on both lines**, which is
+            # what the card says and what a header can hold: the ability
+            # depends on who read the scroll, so it is a rule here and
+            # `Attack.ability_for` answers it per commander.
+            #
+            # The damage side is new -- `Damage.bonus` took a flat number
+            # or an ability named as a string, and this phrase is neither,
+            # so written as a word it hit `_bonus_of`'s `ValueError` and
+            # paid **0**. #1580.
+            attack=Attack(Pick.HIGHEST, vs=AC, plus=4),
+            damage=Damage("1d8", Pick.HIGHEST),
+        ),
     )
 
 

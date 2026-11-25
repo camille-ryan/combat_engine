@@ -82,7 +82,7 @@ from .types import (
 
 if TYPE_CHECKING:
     from .components import Weapon
-    from .dsl import Damage, Power, Range
+    from .dsl import Damage, Pick, Power, Range
     from .ecs import World
     from .skills import CheckResult
 
@@ -6588,10 +6588,37 @@ class Cast:
             role=role, shape=shape,
         )
 
-    def _bonus_of(self, bonus: str | int) -> int:
-        """A flat number, or an ability modifier named as a string."""
+    def _bonus_of(self, bonus: str | int | Pick) -> int:
+        """A flat number, an ability modifier named as a string, or a rule
+        for choosing one.
+
+        **The `Pick` branch is the damage side of what `Attack.ability`
+        has always taken.** `i1066p1` prints *"1d8 + your highest ability
+        modifier"* on an inline summon's damage line, and a header cannot
+        name the ability: the answer depends on who is holding the row.
+        Written as a string it hit the `ValueError` below and returned
+        **0 silently**, so the line was the dice and nothing.
+
+        Resolved through `Attack.ability_for`, the canonical reader, rather
+        than by repeating its rules here -- `Pick.BY_WEAPON` reads the
+        hand, `Pick.PRIMARY` reads the build, and both fall through to the
+        best modifier on the sheet. `Cast.ability_for` already reaches it
+        the same way, by constructing `Attack(Pick.HIGHEST)` for a row with
+        no attack line, so this is the third caller of one rule rather than
+        a second copy of it. #1580.
+
+        `bonus` is also the field a monster's printed damage uses, where it
+        is a flat number -- so the two cheap cases stay first and a `Pick`
+        costs nothing on any row that does not print one.
+        """
+        from .dsl import Attack, Pick
+
         if isinstance(bonus, int):
             return bonus
+        if isinstance(bonus, Pick):
+            return self.stats.mod(
+                Attack(bonus).ability_for(self.world, self.me)
+            )
         if not bonus:
             return 0
         try:

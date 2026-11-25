@@ -1567,9 +1567,22 @@ class Damage:
     """
 
     dice: str = ""
-    #: Added on top: a monster's flat bonus, or a character's ability
-    #: modifier named as a string -- "str", "dex" -- resolved at use.
-    bonus: str | int = 0
+    #: Added on top: a monster's flat bonus, a character's ability
+    #: modifier named as a string -- "str", "dex" -- or a **rule for
+    #: choosing one**, resolved at use.
+    #:
+    #: **The `Pick` is the damage side of what `Attack.ability` has always
+    #: taken**, and for the identical reason: a header is data evaluated
+    #: at import, so a line reading *"1d8 + your highest ability
+    #: modifier"* cannot name the ability -- the answer depends on who
+    #: holds the row. `i1066p1`'s inline summon prints exactly that.
+    #:
+    #: Written as a string it was not a word `Ability` knows, so
+    #: `Cast._bonus_of` hit its `ValueError` and returned **0 silently**:
+    #: the line was the dice and nothing. That reader resolves a `Pick`
+    #: through `Attack.ability_for` now, the canonical one, rather than
+    #: repeating its rules. #1580.
+    bonus: str | int | Pick = 0
     #: The blow's type, or **a list of them** for the 88 rows printing one
     #: roll that is several -- "2d6 + 5 cold and necrotic damage". Written as
     #: one field rather than a scalar plus a second list, on Camille's call
