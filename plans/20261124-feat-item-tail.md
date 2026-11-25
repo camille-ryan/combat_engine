@@ -225,17 +225,47 @@ So **do not plan another triage pass.** The remaining tail is one engine
 facility per row, each owing a WIDE audit. `query.speed(mode=)` was the
 last shared lever and it is spent.
 
-### The ETL batch is three jobs now
+### The ETL batch is three jobs, and none of them is cheap
 
-| | one-line shape |
-|---|---|
-| `f1962` | a queryable `feat_power` edge table -- `#1481` specifies it |
-| `i1700x1` | a `rules_break` table, as `#1001` built `rules_dc` -- `#1471`, ruled |
-| `f3435` | **one entry** in `etl/power.py`'s `_KEYWORDS`: `varies` -- `#1592` |
+| | shape | `#` |
+|---|---|---|
+| `f1962` | a queryable `feat_power` edge table | `#1481` |
+| `i1700x1` | a `rules_break` table, as `#1001` built `rules_dc` | `#1471`, ruled |
+| `f3435` | `varies` in `etl/power.py`'s `_KEYWORDS` | `#1592` |
 
-All three are "extract something the compendium holds into `game.db`", so
-one rebuild covers them. The third is new and the cheapest thing on this
-page.
+All three are "extract something the compendium already holds into
+`game.db`", so **one rebuild covers all three** -- which is the whole
+argument for doing them together.
+
+**I filed the third as "one list entry is the whole fix" and that was
+wrong.** The entry is one line; the job is not, and the reason is worth
+having before anybody picks it up:
+
+```
+ 1 line   `"varies"` in `etl/power.py:_KEYWORDS`
+ 1 line   `Keyword.VARIES` in `engine/types.py`   (54 members, no VARIES)
+19 edits  `keywords=[...]`, across 13 FILES
+ 1        rebuild
+```
+
+`scripts/keywords.py` is **scoped to `power._KEYWORDS`**, so widening that
+list widens the instrument: every row whose card prints the word and whose
+header does not declare it reports as omitting a printed keyword. And
+`keywords.json` is the baseline shape that *may shrink and never grow*, so
+it cannot absorb them -- the 19 have to be declared.
+
+Two things that *are* settled, so nobody re-derives them:
+
+* **the entry is safe.** `_head` reads only the first `powerstat` block, so
+  the match is the keyword line and not prose -- and the word is never in a
+  range slot: **68 of 68** occurrences sit after the semicolon, which is the
+  damage-type position (`Daily Arcane , Implement ; Varies`).
+* **no baseline write is owed.** `Power.score` reads `spec`, `reach` and
+  whether the spec has a newline -- **not** keywords -- so this does not
+  move the chargen draw and costs no `replay` re-record.
+
+And note what it buys: `f3435` becomes **writable**, not finished. Its body
+is still to write on top.
 
 ## Owed
 
