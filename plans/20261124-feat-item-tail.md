@@ -28,6 +28,42 @@ The 16 difference is the story and ship families, deferred by `#787` and
 `#1387` before this ruling -- so 55 counted them as tail work when they
 were not. The number to work against is 39.
 
+### The deferred bucket is 7, not 13 -- re-measured 2026-11-25
+
+The 13 above was right when written and is now nearly double the truth,
+so do not plan an ETL batch off it. Measured by walking `dsl.REGISTRY`
+for feat and item rows whose owed `todo`/`dropped` symbols start `etl.`
+or `compendium.`:
+
+```
+f1962    etl.feat.associated_powers()    real -- #1481 specifies the store
+i1700x1  etl.rules_break                 real -- #1471, ruled and queued
+i2611p1  etl.item.second_base            arguable -- the form is in prose
+f2263    etl.paragon_path                a scope exclusion, not a gap
+f3425    compendium.associated_powers    source
+i3475p1  compendium.creature_maker       source
+i694x1   compendium.character_power_absent  source
+```
+
+Where the other six went. `f951`, `f1252` and `f3768` were cleared
+earlier the same day. `i3560x1` was **never an ETL row** -- its species
+is in no column the source carries, so no importer could have reached
+it, and it is written now by gating on identity by ref. `i1492p1` moved
+to `chargen.item_pairing`: its "pair" is two copies of one item, so
+there is no edge to import. `f2624` is parked on `#1561`.
+
+So **4 of the 8 `etl.*` rows I triaged were mislabelled**, all four by
+the same mistake -- the measurement behind the marker had been run
+against `data/game.db`, which is the built output and can only report
+what ETL already takes. `#1590` carries that finding; `23ef1aa9` is the
+correction.
+
+What this does *not* change: the ruling still defers the bucket, and the
+tail is still the number to work against. It means the batch, when it
+runs, is **two real jobs** -- both "extract a table the compendium holds
+into `game.db`", the shape `#1001` already built once for `rules_dc` --
+and not thirteen.
+
 
 Written 2026-11-24, after clearing five rows and finding that picking
 rows one at a time has stopped paying. 60 feat/item rows carry a marker;
@@ -151,6 +187,15 @@ A parameter in a marker usually implies a mechanism -- `c.extra_action
 
 ## Owed
 
-6 commits unpushed, all touching `engine/` or `scripts/audit.py`, so a
-wide sweep is owed before the next push. ETL and the rebuild stay
-deferred per the standing order.
+Updated 2026-11-25. The six commits this described were swept and
+pushed; **one** is unpushed now, `23ef1aa9`, and it touches
+`content/items/` and `scripts/drivers.py` only -- no `engine/`, no
+`etl/`, no `scripts/audit.py`. So the audit map could narrow it rather
+than refuse, and what it owes before a push is the wide sweep every push
+owes, not one forced by a WIDE path.
+
+The new `drivers` rule is `species_by_ref`, and adding a rule means
+running the **suite**, not the rule: a new key passing says nothing about
+the registry it was added to. `--tries 40` is the per-commit size.
+
+ETL and the rebuild stay deferred per the standing order and `#1471`.

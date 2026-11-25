@@ -860,7 +860,7 @@ def i1066x1(c: Cast) -> None:
 
 @power("i1066p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(10), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       dropped=("Damage.pick", "query.speed(mode=)"))
+       dropped=("query.speed(mode=)",))
 def i1066p1(c: Cast) -> None:
     """The block is printed in the power's own text and the spec carries
     all of it, so a missing block was the wrong hold: the defence
@@ -880,16 +880,27 @@ def i1066p1(c: Cast) -> None:
     attack line off `get(c.ref).summon`. `p11840` declares the whole block
     in the header and spends it from the body, which is the convention.
 
-    So what is left is two narrower things, and both are named above.
+    So what is left is **one** narrower thing, named above.
 
-    * **`Damage.pick`.** The attack line goes in a header unchanged; the
-      damage line cannot. `Damage.bonus` is `str | int` and
-      `Cast._bonus_of` resolves it as `Ability(bonus.lower())`, catching
-      the `ValueError` and returning **0 silently** -- so "1d8 + your
-      highest ability modifier" written there is the dice and nothing.
-      `Attack.ability` already takes a `Pick`; this is the same field on
-      the damage side, so `c.command`'s `_bonus_of` has a rule to resolve
-      rather than a word to look up.
+    * **`Damage.pick` has landed, and this bullet described it as missing
+      for a day after it did.** `Damage.bonus` is `str | int | Pick` now
+      and `Cast._bonus_of` resolves a `Pick` through
+      `Attack(bonus).ability_for`, so the header's
+      `damage=Damage("1d8", Pick.HIGHEST)` below pays the printed line
+      instead of the old silent 0 -- `_bonus_of` had been running
+      `Ability(bonus.lower())`, catching its own `ValueError` and
+      returning nothing, so the line was the dice and no modifier on a
+      row that audited green. `drivers.damage_pick` is the gate and
+      asserts it on this ref.
+
+      It was left in the `dropped=` tuple by the same change that fixed
+      it, which is the stale-marker failure this tree keeps paying for --
+      and `todo.py` could not catch it, because the symbol names
+      `Damage.pick` while the field that grew the type is `Damage.bonus`.
+      A symbol that names no real member can never be reported ARRIVED.
+      Found by its **premise** rather than its name: the facility it
+      describes is the one `Pick.HIGHEST` two lines below the decorator
+      uses.
     * **`query.speed(mode=)`.** The Instinctive Effect is the *shape*
       `summons.hunt` already has -- a bloodied enemy beside it, otherwise
       close on the nearest, otherwise a bloodied ally within reach or
