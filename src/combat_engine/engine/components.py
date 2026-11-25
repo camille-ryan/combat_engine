@@ -3697,6 +3697,29 @@ class Weapon:
     #: plain -- the number is here so that the rows that *reduce* it have
     #: something to reduce, and so that a weapon with one runs hotter.
     enhancement: int = 0
+    #: Whose bonded blade this is, by eid, or 0. **On the weapon and not
+    #: on a `Gear`, because the record has to survive the weapon changing
+    #: hands** -- which is the whole of the clause that wants it:
+    #: *"while this weapon is bonded to you ... any other creature takes a
+    #: -2 penalty to attack rolls with this weapon"* (`i2359x1`).
+    #:
+    #: `Cast._caught` appends the **same `Weapon` object** into the
+    #: catcher's gear, so a field here travels with the blade through a
+    #: disarm; a set on the owner's `Gear` would be left behind, which is
+    #: exactly the case the penalty is about.
+    #:
+    #: **Not `Gear.bonded`**, which is a different printed bond -- one
+    #: forged over an extended rest, specific to the item, read by
+    #: `Cast.bonded`. This is the swordmage class feature's bond, and
+    #: `i2359x1`'s note has why two words that read alike are two
+    #: mechanisms.
+    #:
+    #: `cf:swordmage-f0`'s own note settles why nothing else needed this:
+    #: the **recall** clause is served by `Item.was`, the record of whose
+    #: the weapon was when it hit the floor. That is consumed when the
+    #: weapon is picked up, so it cannot answer a question asked while
+    #: somebody else is holding it. #1580.
+    bonded_to: int = 0
     #: An **explicit** critical-hit die, for a weapon whose card prints one
     #: rather than carrying the printed "high crit" property.
     #:

@@ -4295,6 +4295,20 @@ class Cast:
                      if w.ref in gear.lends_proficiency), None)
                 if lent is not None:
                     bonus += lent.proficiency
+            # **Somebody else's bonded blade swings badly.** *"While this
+            # weapon is bonded to you with the swordmage cf:swordmage-f0
+            # class feature, any other creature takes a -2 penalty to
+            # attack rolls with this weapon"* -- `i2359x1`.
+            #
+            # Read here rather than laid as a `Mod`, because the creature
+            # it penalises is not known when the bond is forged: the blade
+            # has to change hands first, and `Cast._caught` is what moves
+            # it. `Weapon.bonded_to` travels with the object, so the only
+            # question left at swing time is whose hand it is in.
+            swung = self._wielded()
+            owner = getattr(swung, "bonded_to", 0)
+            if owner and owner != self.me:
+                bonus -= 2
             bonus += self._enhancement_of(p)
         return bonus
 

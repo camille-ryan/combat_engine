@@ -49565,6 +49565,22 @@ UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
     # order no card states, so a body that *ended* the vulnerability
     # would find nothing to end whenever it armed first. #1510.
     "cf:vampire-f2": ("f3621",),
+    # **`i2359x1` WRITES A RECORD; writing is not laying.** *"While this
+    # weapon is bonded to you with the swordmage cf:swordmage-f0 class
+    # feature, any other creature takes a -2 penalty to attack rolls with
+    # this weapon."* The row reads that feature's gate and, when it
+    # holds, sets `Weapon.bonded_to` -- a field on the blade, not an
+    # effect on anybody. The penalty itself is read in
+    # `Cast._attack_bonus` at swing time, and it belongs to whichever
+    # creature is holding the blade, who is not on the board when the
+    # record is written.
+    #
+    # So there is no moment at which an effect belongs to
+    # `cf:swordmage-f0`, and a `c.credit` block would wrap an empty
+    # stack. Fifth direction into this dict: `cf:vampire-f2` withholds,
+    # `p1448` skips, `f3636` refuses, `p2485` raises a number, and this
+    # one writes a field. #1580.
+    "i2359x1": ("cf:swordmage-f0",),
     # **`p2485` reads `f443`'s gate to RAISE a number it then lays;
     # raising is not laying.**
     # *"For each r28 component you have, your p2485 racial power grants 1
@@ -100771,12 +100787,28 @@ def only_the_bonded_wielder_uses_the_sword(out: Result) -> None:
         out.that(not REGISTRY[ref].unfinished,
                  f"{ref} carries no marker",
                  f"{REGISTRY[ref].unfinished}")
-    out.that(REGISTRY["i2359x1"].unfinished == ("Gear.owned",),
-             "while `i2359x1` stays on `Gear.owned` and is NOT served by"
-             " this: *'any other creature takes a -2 penalty to attack"
-             " rolls with this weapon'* needs to know whose weapon is in"
-             " somebody else's hand, which is a different record",
+    # **`i2359x1` is finished now, and still not by this.** The arm used
+    # to pin its marker -- `unfinished == ("Gear.owned",)` -- and the
+    # reasoning beside it was right and still is: *"any other creature
+    # takes a -2 penalty to attack rolls with this weapon"* needs to know
+    # whose weapon is in somebody else's hand, which `Gear.bonded` cannot
+    # say. What changed is that the different record now exists.
+    #
+    # `Weapon.bonded_to` is it, written by the row and read in
+    # `Cast._attack_bonus`, on the **weapon** so it survives the blade
+    # changing hands -- `drivers.bonded_blade` is the proof, 9 arms and
+    # three plants. So this arm asserts the two mechanisms stayed
+    # separate rather than asserting the row stayed broken. #1580.
+    out.that(not REGISTRY["i2359x1"].unfinished,
+             "while `i2359x1` is finished -- by its own record and not by"
+             " this one",
              f"{REGISTRY['i2359x1'].unfinished}")
+    out.that("i2359" not in gear3.bonded,
+             "and its item is still NOT in `Gear.bonded`, which is the"
+             " distinction that kept them apart: this bond is forged over"
+             " an extended rest and is the item's, where the swordmage's"
+             " is the class feature's and lives on the blade",
+             f"{sorted(gear3.bonded)}")
 
 
 def a_swapped_power_goes_back_at_a_rest(out: Result) -> None:
@@ -137643,6 +137675,145 @@ def a_warlock_spell_cast_through_a_bow_takes_the_bows_range(out: Result) -> None
              f"back to {reach(w2, me2, hit_ranged)}")
 
 
+def a_bonded_blade_swings_badly_in_another_hand(out: Result) -> None:
+    """`i2359x1`: *"while this weapon is bonded to you with the swordmage
+    cf:swordmage-f0 class feature, any other creature takes a -2 penalty
+    to attack rolls with this weapon."*
+
+    **The clause only exists once the blade changes hands**, which is why
+    it sat marked for so long: the creature it penalises is not on the
+    board when the bond is forged, so there is nothing to lay a `Mod` on.
+    `Weapon.bonded_to` records the owner **on the blade**, and
+    `Cast._caught` appends the same `Weapon` object into a catcher's gear,
+    so the record travels with the object. `Cast._attack_bonus` reads it
+    at swing time, when the hand is finally known.
+
+    Reachable, measured rather than assumed: `c.disarm(catch=True)`
+    *"knocks a weapon out of a hand"* and puts it *"into the catcher's"*,
+    so another creature really can end up holding it. That was the
+    question this row's note had doubted in writing.
+
+    Every arm measures through `Cast._attack_bonus`, the one place an
+    attack bonus is assembled -- reading `bonded_to` back would assert
+    only that the row wrote it.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Ability
+
+    ROW = "i2359x1"
+
+    # **`_board`'s third value is EVENT NAMES, not creatures.** Reading
+    # it as a set of eids crashed on `entity EffectApplied has no Gear`.
+    # `query.enemies` is the reader for another creature on the board.
+    world, me, _events = _board(ROW, 1)
+    gear = world.need(me, Gear)
+    out.that(bool(gear.weapons),
+             "premise: the board gives this item's wielder a weapon",
+             f"{[w.ref for w in gear.weapons]}")
+    blade = gear.weapons[0]
+    out.that(blade.bonded_to == 0,
+             "premise: that weapon carries no bond before the row runs,"
+             " so a bond found later is the row's doing",
+             f"bonded_to={blade.bonded_to}")
+
+    from combat_engine.engine.components import Powers
+    powers = world.need(me, Powers)
+    if "cf:swordmage-f0" not in powers.known:
+        powers.known.append("cf:swordmage-f0")
+    out.that(Cast(world=world, me=me, ref="drv").feat("cf:swordmage-f0"),
+             "premise: the wielder has the swordmage bond feature, which"
+             " is the card's own condition -- staged, because the board"
+             " deals this item to whatever class it likes",
+             "holds cf:swordmage-f0")
+
+    use(world, me, ROW, spend=False)
+    out.that(blade.bonded_to == me,
+             "the row records the bond ON THE BLADE, so it can survive the"
+             " weapon changing hands",
+             f"bonded_to={blade.bonded_to}, wielder={me}")
+
+
+    # -- the same blade, in somebody else's hand ---------------------------
+    others = enemies(world, me)
+    thief = others[0] if others else None
+    out.that(thief is not None,
+             "premise: the board has another creature to put the blade in",
+             f"others={others[:4]}")
+    other = world.need(thief, Gear)
+    other.weapons.insert(0, blade)          # the shape `Cast._caught` makes
+
+    def thief_swings() -> int:
+        return Cast(world=world, me=thief,
+                    ref="drv")._attack_bonus(Ability.STR)
+
+    # **The control is the SAME blade with the bond toggled, not the
+    # thief's own weapon.** Comparing before and after the insert was the
+    # first draft and it is confounded: putting a weapon in at index 0
+    # changes what `_wielded()` answers, so the thief gained the blade's
+    # proficiency and the arm read 2 -> 4 while the penalty was applying
+    # perfectly well underneath. Toggling one field isolates it.
+    with_bond = thief_swings()
+    blade.bonded_to = 0
+    unbonded = thief_swings()
+    blade.bonded_to = me
+    out.that(with_bond == unbonded - 2,
+             "another creature swinging the bonded blade is 2 worse off"
+             " than swinging the very same blade unbonded -- the printed"
+             " penalty, reaching a creature the bond could never have"
+             " been laid on",
+             f"bonded {with_bond}, unbonded {unbonded}")
+
+    # -- and the owner is not penalised ------------------------------------
+    #
+    # **Toggled too, for the reason the thief arm is.** The first draft
+    # captured the owner's bonus after the bond and compared it with
+    # itself, so a penalty that hit everyone -- the `owner != self.me`
+    # test deleted -- passed this arm. Comparing bonded against unbonded
+    # on the same creature is what tells them apart.
+    def owner_swings() -> int:
+        return Cast(world=world, me=me, ref="drv")._attack_bonus(Ability.STR)
+
+    owner_bonded = owner_swings()
+    blade.bonded_to = 0
+    owner_plain = owner_swings()
+    blade.bonded_to = me
+    out.that(owner_bonded == owner_plain,
+             "while the OWNER is unaffected by its own bond -- 'any other"
+             " creature' is the printed narrowing, and a blanket penalty"
+             " would read identically on every other arm here",
+             f"bonded {owner_bonded}, unbonded {owner_plain}")
+
+    # -- a row that never ran bonds nothing --------------------------------
+    #
+    # The arm above toggles the field; this one checks the ROW is what
+    # sets it, by not running the row at all. Together they say the
+    # penalty is the bond's and the bond is this row's.
+    w2, me2, _ev2 = _board(ROW, 1)
+    g2 = w2.need(me2, Gear)
+    out.that(g2.weapons[0].bonded_to == 0,
+             "with the row unrun the blade carries no bond, so the field"
+             " is written by i2359x1 and is not a property of the item's"
+             " own weapon",
+             f"bonded_to={g2.weapons[0].bonded_to}")
+
+    # -- and the row refuses to bond for a non-swordmage -------------------
+    w3, me3, _ev3 = _board(ROW, 1)
+    g3 = w3.need(me3, Gear)
+    p3 = w3.need(me3, Powers)
+    while "cf:swordmage-f0" in p3.known:
+        p3.known.remove("cf:swordmage-f0")
+    use(w3, me3, ROW, spend=False)
+    out.that(g3.weapons[0].bonded_to == 0,
+             "and a holder WITHOUT the swordmage feature bonds nothing --"
+             " the card's condition is 'bonded to you with the swordmage"
+             " cf:swordmage-f0 class feature', so the gate is the feature"
+             " and not merely holding the item",
+             f"bonded_to={g3.weapons[0].bonded_to}")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -141015,6 +141186,11 @@ DRIVERS = {
         a_warlock_spell_cast_through_a_bow_takes_the_bows_range,
         "i2008p1 gives a warlock ranged or area ATTACK spell the bow's"
         " range, and leaves a utility and another class alone",
+    ),
+    "bonded_blade": (
+        a_bonded_blade_swings_badly_in_another_hand,
+        "i2359x1 penalises any other creature swinging the swordmage's"
+        " bonded blade, and leaves the owner alone",
     ),
     "vampire_weaknesses": (
         a_vampires_weaknesses_and_the_feat_that_lifts_them,

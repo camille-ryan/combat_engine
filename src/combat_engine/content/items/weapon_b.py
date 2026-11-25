@@ -6740,7 +6740,6 @@ def i2358p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Gear.owned",),
 )
 def i2359x1(c: Cast) -> None:
     """The square lands; the bonded-weapon penalty does not.
@@ -6794,6 +6793,23 @@ def i2359x1(c: Cast) -> None:
     would be the mistake rather than the fix. Checked by reading all three
     cards, because `blocked.py --group` shows only the spellings."""
     c.extend_every("teleport", 1)
+    # **The bond, recorded on the blade rather than on its owner.** The
+    # card's condition is *"while this weapon is bonded to you with the
+    # swordmage cf:swordmage-f0 class feature"*, so the gate is whether
+    # this holder has that feature -- the bond itself is an hour of
+    # meditation between fights and has no moment in a fight to happen in.
+    #
+    # Written here and not in `cf:swordmage-f0` because the penalty is
+    # **this item's** clause: another swordmage's bonded blade penalises
+    # nobody unless it is also this item. Writing it into the class
+    # feature would hand the clause to every bonded weapon in the game.
+    #
+    # `Weapon.bonded_to` and not a `Gear` set, because the record has to
+    # survive the blade changing hands -- see its own note, and
+    # `Cast._attack_bonus` for the read.
+    blade = c.my_weapon()
+    if blade is not None and c.feat("cf:swordmage-f0"):
+        blade.bonded_to = c.me
 
 
 @power(
