@@ -187,38 +187,24 @@ KNOWN_SILENT = {
                "board deals one weapon, so `gear.off` is None and the "
                "gate is correctly False. drivers.off_hand_item stages a "
                "two-weapon hand and is the proof. #1492",
-    # **The board cannot put this item's own weapon in the wielder's
-    # hand.** `i2730`'s printed base is the `bow` *group* rather than one
-    # weapon, so `audit.board` equips an axe -- and the row's first line
-    # is `c.my_weapon()`, which matches on `Weapon.item` and not on
-    # whatever magic is held. With no bow it returns at once, and with no
-    # bow there is no ranged basic attack for it to replace either, so
-    # there is nothing the board could pose instead.
+    # **`i2730p1`'s excuse is gone: the row does something now.**
+    # `audit` reported it OUTGROWN and the instrument's instruction is to
+    # delete the entry, which this is.
     #
-    # Nothing is wrong with the row. `drivers.swing_replaced` is the
-    # proof, which is the condition `scripts/CLAUDE.md` sets before a
-    # silent row may be recorded as known: it stages the bow as the
-    # item's own, grants a ranged at-will (the dealt character has none),
-    # and measures `AttackRolled` **by power** -- so "the at-will fired
-    # as well" and "the at-will fired instead" are told apart. Three
-    # plants, all red. #1502.
-    "i2730p1": "the board equips an axe because i2730's printed base is "
-               "the bow GROUP, so `c.my_weapon()` is None and the row "
-               "returns on its first line -- and with no bow there is no "
-               "ranged basic to replace. drivers.swing_replaced stages "
-               "the bow and is the proof. #1502",
-    # **A third row of #1499's shape**, found by sweeping the marked rows
-    # for notes that had already concluded the clause grants nothing.
-    # `i2413x1` prints "creatures that have tremorsense must have line of
-    # sight to detect you" -- and tremorsense is no bypass to begin with:
-    # `query.sees_through` consults `sees_invisible` and three `truesight*`
-    # keys and nothing else, so it never finds a hidden creature with or
-    # without this armour.
+    # The excuse read "the board equips an axe ... with no bow it returns
+    # at once", and that was not quite the mechanism: `c.my_weapon()`
+    # matches on `Weapon.item`, so it hands back the **axe** rather than
+    # `None`, and the row went on to `if not mine: return` -- it was
+    # silent for want of a ranged at-will to swap in, not for want of a
+    # bow. The draw now deals the character one, so it fires.
     #
-    # `drivers.tremorsense_does_not_see_through_a_hide` is the proof, and
-    # it carries two positive controls -- truesight and `see_invisible`
-    # each do reveal the wearer -- because "still hidden" on its own
-    # passes on any board where nothing sees through a hide. #1501.
+    # Nothing about the row changed. It moved because clearing markers on
+    # `f951`, `f1252` and `i2008p1` put them in the chargen pool and the
+    # draw shifted, which is the same cause as the two rows that went
+    # silent in the sweep before this. Expect it to oscillate: if a later
+    # draw leaves the character with no ranged at-will again, this becomes
+    # a newly-silent row rather than an outgrown excuse. #1517's entry
+    # above says the same thing about itself in as many words.
     "i2413x1": "the card forbids a tremorsense bypass and there is no "
                "bypass: `query.sees_through` reads `sees_invisible` and "
                "`truesight*` only, so tremorsense finds no hidden "
