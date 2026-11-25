@@ -137942,6 +137942,92 @@ def an_aura_drives_an_affected_creature_out_on_its_turn(out: Result) -> None:
              f"{was} unchanged")
 
 
+def a_species_exclusion_is_gated_by_ref(out: Result) -> None:
+    """`i3560x1` turns on a species, and a species is not a type word.
+
+    A printed type line is size, origin and type. `Monster.Keywords` in the
+    compendium carries exactly that line for all 5,326 rows, and where the
+    book *appends* a species after a comma ETL already splits it out -- so
+    `query.kinds_of` answers for some creatures and not others. For this
+    card's ten it is never appended: `kinds_of` returns it for **0 of 10**,
+    and the row's old `etl.monster.species` marker therefore blamed an
+    importer for a word the page does not print. No importer could have
+    cleared it. The gate is identity by ref instead, which `items/` already
+    does in eight places.
+
+    Two arms, because the card has two clauses and one ref set serves both.
+    Emptying the set reds both; removing the `c.truesight` call reds only
+    the sensing arm -- which is what says they are measured separately
+    rather than one assertion counted twice.
+
+    The skill arm is also the only thing in the tree holding
+    `c.bonus(when=)` against a **skill check's target**. `neck.py`'s own
+    header asserted for a long time that a skill check had no target and
+    named this very row as unwritable; `SkillCheck.target` had landed
+    underneath it and nothing noticed, because nothing asked.
+    """
+    from combat_engine.engine import query, skills
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Ident
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW = "i3560x1"
+    EXCLUDED, CONTROL = "m173", "m145"
+
+    world, me, _ev = _board(ROW, 1)
+    foes = query.enemies(world, me)
+    out.that(len(foes) >= 2,
+             "the board fields two foes -- the premise, since one arm"
+             " needs the excluded creature and the other its control",
+             f"foes={len(foes)}")
+    if len(foes) < 2:
+        return
+    marked, plain = foes[0], foes[1]
+    world.add(marked, Ident(ref=EXCLUDED))
+    world.add(plain, Ident(ref=CONTROL))
+
+    c = Cast(world=world, me=me, ref=ROW)
+    plus = c.enhancement
+    out.that(plus > 0,
+             "the worn cloak has an enhancement bonus -- the premise, and"
+             " without it the whole skill half would be a gate on zero",
+             f"enhancement={plus}")
+    c.hide()
+    hidden = (query.unseen_by(world, marked, me),
+              query.unseen_by(world, plain, me))
+    out.that(all(hidden),
+             "the wearer is hidden from both foes before the row runs --"
+             " the premise for the sensing clause, which undoes exactly"
+             " this and would be unobservable without it",
+             f"excluded={hidden[0]} control={hidden[1]}")
+
+    REGISTRY[ROW].body(c)
+
+    out.that(query.sees_through(world, marked, me),
+             "the excluded creature knows where the wearer is, which is"
+             " what the printed drawback costs",
+             f"{EXCLUDED}")
+    out.that(not query.sees_through(world, plain, me),
+             "a creature of any other kind is still fooled -- the negative"
+             " control, and what says the gate reads the ref rather than"
+             " handing every watcher sight",
+             f"{CONTROL}")
+
+    vs_marked = skills.modifier(world, me, "intimidate", target=marked)
+    vs_plain = skills.modifier(world, me, "intimidate", target=plain)
+    vs_nobody = skills.modifier(world, me, "intimidate")
+    out.that(vs_plain - vs_marked == plus,
+             "the item bonus to Intimidate is withheld against the excluded"
+             " creature and paid against any other, by exactly the"
+             " enhancement",
+             f"excluded={vs_marked} control={vs_plain} plus={plus}")
+    out.that(vs_nobody == vs_plain,
+             "a check against nobody keeps the bonus -- `ctx['target']` is"
+             " None there, and reading None as excluded would silently drop"
+             " the bonus from every check that names no creature",
+             f"nobody={vs_nobody} control={vs_plain}")
+
+
 def a_damage_line_can_name_a_rule_for_choosing_an_ability(out: Result) -> None:
     """`Damage.bonus` takes a `Pick`, which is the damage side of what
     `Attack.ability` has always taken.
@@ -141415,6 +141501,11 @@ DRIVERS = {
         an_aura_drives_an_affected_creature_out_on_its_turn,
         "i3305p1 drives an affected creature out of its aura on that"
         " creature's turn, and leaves it alone when no route exists",
+    ),
+    "species_by_ref": (
+        a_species_exclusion_is_gated_by_ref,
+        "i3560x1 gates both its clauses on creature identity by ref,"
+        " where the species is in no column the source carries",
     ),
     "damage_pick": (
         a_damage_line_can_name_a_rule_for_choosing_an_ability,

@@ -15,10 +15,14 @@ Four judgements run through the file.
   `durations.keywords_of`. So "against charm, fear or illusion effects",
   the single commonest line in this slot, is a gate and not a gap, and
   every block below says it with `_saves_against(keywords=...)`.
-* **A skill check has no target.** `SkillCheck` is `actor`, `skill`, `dc`
-  and the roll, so "Heal checks to administer first aid **to you**" and
-  "Intimidate checks **except against gargoyles**" cannot be narrowed. The
-  bonus itself is ordinary: `c.bonus("skill:heal", n)`.
+* **A skill check carries its target, and this paragraph said the
+  opposite.** It read *"`SkillCheck` is `actor`, `skill`, `dc` and the
+  roll"*, so both lines in this slot that narrow by creature -- first aid
+  administered **to you**, and `i3560x1`'s species exclusion -- were
+  called unwritable. `SkillCheck.target` landed, and `skills.modifier`
+  puts it in the context handed to every `c.bonus(when=)` predicate, so
+  the gate is a `when=` reading `ctx["target"]`. The bonus itself is still
+  ordinary: `c.bonus("skill:heal", n)`.
 * **`kind="enhancement"` is spoken for on Fortitude, Reflex and Will.**
   `equipment._defence_mods` writes the neck's own plus there and two of a
   kind do not stack, so every defence bonus below is `item`, `power` or
@@ -76,6 +80,7 @@ from combat_engine.engine import (
     Healed,
     Health,
     Hit,
+    Ident,
     InitiativeRolled,
     Keyword,
     Melee,
@@ -1475,7 +1480,7 @@ def i1225x1(c: Cast) -> None:
        trigger="an ally within 5 squares would be bloodied by an attack",
        on=Trigger(DamageRolled, _ally_about_to_be_bloodied,
                   "an ally within 5 squares would be bloodied"),
-       dropped=("etl.item.paired_item()",))
+       dropped=("chargen.item_pairing",))
 def i1492p1(c: Cast) -> None:
     """A paired item: nothing links two items together, so this answers for
     any ally in range, which is wider than print.
@@ -1488,12 +1493,36 @@ def i1492p1(c: Cast) -> None:
     printed as one of a *pair* -- which is the thing a marker is not
     allowed to do.
 
-    So the gap is named where it is, and it is **in the ETL**: nothing in
-    `game.db` says which item this one is paired with. `i1492`'s own
-    `item.spec` is empty, no `item_block` spec anywhere names `i1492`, and
-    the partner survives only as a common noun inside this card's own
-    sentence. No reader can be written from that. `etl.monster.item_identity()`
-    on `m3448a1` is the same shape of marker. #1480."""
+    **And it is not in the ETL either, which is where the marker pointed
+    for its second wrong guess.** It read `etl.item.paired_item()` on the
+    reasoning that *"nothing says which item this one is paired with"* --
+    true, and it assumed the partner is a **second, different item** whose
+    link the data drops. It is not: the card is printed as a pair of the
+    *same* item, so the partner is an ally wearing this very ref. Read
+    against `compendium.sqlite` rather than `game.db`, the source has one
+    `Item` row, `Category='Neck'`, and no second id to link to -- there is
+    no edge missing, because there are not two things.
+
+    So the reader does exist. `Gear.worn` holds every magic item on a
+    creature and content reads it directly in `feats/skills.py` and
+    `feats/artificer_b.py`; *"an ally within 5 wearing `i1492`"* is one
+    comprehension and is strictly closer to print than what this row does
+    now.
+
+    **What stops it is reachability, measured rather than assumed.**
+    `chargen.treasure(who, rng)` deals three items **per character** with
+    nothing coordinating across the party, and it records no pairing -- so
+    two members *can* draw this ref independently, and which circlet is
+    attuned to which is written nowhere. On the audit board as posed the
+    caster wears `i1492` and **neither ally does**, so gating the trigger
+    would make the row fire in no fight the harness can build: a correct
+    implementation that reports as a dead row, which is the shape
+    `KNOWN_SILENT` exists for and the shape a marker is better than.
+
+    Hence `chargen.item_pairing` -- the right layer, and the honest one.
+    Narrowing it wants the board able to pose two wearers, and
+    `scripts/audit.py` is in `audit.WIDE`, so that is a gate-owner's
+    change and not a row's. #1480."""
     ally = getattr(c.trigger, "target", None)
     if ally is None:
         return
@@ -1845,32 +1874,75 @@ def i3463x1(c: Cast) -> None:
                               Keyword.THUNDER, Keyword.LIGHTNING))
 
 
+#: The ten imported creatures both of `i3560x1`'s clauses are about. Their
+#: shared species is the thing the card turns on, and a ref set is the only
+#: place this engine can hold it.
+#:
+#: A printed type line is size, origin and type, and the compendium's
+#: `Monster.Keywords` carries exactly that line for all 5,326 rows. Where
+#: the book *appends* a species after a comma, ETL already splits it out
+#: and `query.kinds_of` answers -- `m5445` is the worked case in `m5878a5`'s
+#: note, which is why `m5445a3` asks the identical question and fires. For
+#: these ten it is never appended, so `kinds_of` returns it for **0 of 10**
+#: and no importer could change that: the source does not carry the word.
+#:
+#: Hand-written off the compendium's own names, which is the main session's
+#: job -- root `CLAUDE.md`, *"the main session may read a name"* -- and
+#: leaves only refs in the tree. Levels 5 to 12, so this is reachable in
+#: band rather than a dead gate.
+_SENSES_THE_CLOAK = frozenset({
+    "m173", "m2730", "m4124", "m4882", "m4883",
+    "m4884", "m4885", "m5712", "m115741", "m115743",
+})
+
+
 @power("i3560x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("etl.monster.species",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.truesight(of=, within=)",))
 def i3560x1(c: Cast) -> None:
-    """"Except against gargoyles" is a **species** exclusion.
+    """Both printed clauses turn on one species, and a species is not a type
+    word -- `_SENSES_THE_CLOAK` above has where it does and does not exist.
+    So this row gates on **identity by ref**, which is ordinary here: eight
+    blocks under `items/` already read `Ident`, and it needs no new verb and
+    no importer.
 
-    `SkillCheck.target` landed and gives the creature; what it cannot give
-    is that creature's species.
+    **The marker said `etl.monster.species` and that was wrong.** It blamed
+    ETL for a word the printed page does not carry, so no importer could
+    ever have cleared it and the row would have waited forever. What is
+    genuinely missing is one square count: `c.truesight(of=)` names a
+    creature at **any** distance and its own docstring says `radius` is
+    ignored beside `of=`, so the printed 20-square limit cannot be said.
+    The symbol borrows `within=` from `c.see_invisible`, which is the
+    parameter already meaning exactly this and the one `truesight` lacks --
+    naming `radius=` instead made `todo.py` report the symbol ARRIVED,
+    since both parameters do exist and it is only their combination that
+    does not.
 
-    **Re-pointed off `Target.ident`, which was wrong twice.** This row has
-    `target=SELF` and lays a gated `skill:` modifier -- there is no target
-    line here to filter, so a `Target` field could never have answered it.
-    And `Target.ident` is now a field that exists, so the marker had begun
-    to claim the row was ready.
+    The over-grant is a sliver. The largest board in use is 24x16, so the
+    furthest two creatures can stand is 23 squares; on the audit board
+    (20x16) the maximum is 19 and the clause cannot bite at all. #570.
 
-    The old note also said `query.kinds_of` returns "an origin and a type
-    and never a species", and that is too strong: it returns **101
-    distinct words** across the corpus and plenty are species -- `kobold`,
-    `orc`, `plant`. What is true is that the word is **uneven**. A species
-    appears only when the stat block prints it in the parenthetical, and
-    `m5878a5` carries the measurement: `m5445` has its species in both
-    `keywords` and `kind`, so `m5445a3` asks the identical question and
-    fires, while a same-family block carries only size, origin and type.
-    So the gap is the data, which is what the symbol now names. #570.
+    The sensing is laid **per creature**, not on the wearer, because
+    `query.unseen_by` asks it of the *watcher*: it is that creature which
+    stops being fooled, and that is what "knows your location" costs. A
+    creature arriving later is not covered -- the same honest limit
+    `c.see_unseen` carries, for the same reason: nothing announces a
+    creature joining the board.
     """
+    for who in query.creatures(c.world):
+        ident = c.world.get(who, Ident)
+        if ident is not None and ident.ref in _SENSES_THE_CLOAK:
+            c.truesight(of=c.me, on=who, until=When.ENCOUNTER)
+
+    def not_excluded(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("target")
+        if not isinstance(who, int):
+            return True
+        ident = c.world.get(who, Ident)
+        return ident is None or ident.ref not in _SENSES_THE_CLOAK
+
     c.bonus("skill:intimidate", c.enhancement, on=c.me,
-            until=When.ENCOUNTER, kind="item")
+            until=When.ENCOUNTER, kind="item", when=not_excluded)
 
 
 @power("i3560p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,

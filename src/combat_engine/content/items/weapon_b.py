@@ -5191,7 +5191,7 @@ def i456p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("etl.power.absent",),
+    todo=("compendium.character_power_absent",),
 )
 def i694x1(c: Cast) -> None:
     """**Re-aimed: the spec prints a name because there is no ref to
@@ -5210,14 +5210,41 @@ def i694x1(c: Cast) -> None:
         monster_power              1   a creature's version of it
 
     So no character row exists for the mechanic this card triggers on,
-    and the one row that has it is a monster ability. The source book is
-    imported -- 110 feats, 61 items and 138 powers cite it, and this
-    item is one of them -- so this is a **row the import does not
-    carry**, not a book outside its scope.
+    and the one row that has it is a monster ability.
+
+    **Re-pointed from `etl.power.absent`, which blamed the importer for
+    something the source does not hold.** Those counts are of `game.db`,
+    which is the built output and can only ever report what ETL already
+    takes -- so they could not tell a missing importer from a missing
+    page. Re-measured against `compendium.sqlite` itself, which is the
+    only file that can answer it:
+
+        compendium `Power` rows naming it      0
+        every other table, by name             0
+        tables citing it in their text         Feat 9, Item 6, Monster 4,
+                                               ParagonPath 3, EpicDestiny 2,
+                                               Power 2, Terrain 2, Trap 1
+
+    Every one of those citations is a **prerequisite or a rider** -- "you
+    gain the … power", "Prerequisite: … power" -- which is evidence the
+    mechanic exists, never evidence of what it does. The same distinction
+    the root file draws about a quoted table.
+
+    The full text exists in exactly one place, a single creature's
+    triggered action, and it is **not derivable from there**: that version
+    carries the stat block's own necrotic damage and its own square count,
+    so writing a character's version off it would invent two numbers no
+    page prints for a character. The project rule forbids exactly that.
+
+    And the character-side rule is in a campaign-setting book. `ls
+    resources/` is 18 PDFs and that book is not among them, so the source
+    is absent in both places a source can be. Hence `compendium.*` rather
+    than `etl.*`: there is no importer that could carry this, and a symbol
+    saying otherwise would have left the row waiting on work nobody could
+    do.
 
     `c.reroll_attack(bonus=)` is still the payout and still exists. What
-    is missing is the thing to watch for, and it is missing one layer
-    below the spec.
+    is missing is the thing to watch for.
 
     **`todo=` stays and `defect=` was considered and refused.** The
     vocabulary fits -- *"the compendium is missing what the row would be

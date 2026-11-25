@@ -1808,7 +1808,7 @@ def i3475x1(c: Cast) -> None:
        target=Target("enemy", 1, label="one construct",
                      kinds=frozenset({"construct"})),
        attack=Attack(vs=WILL, printed=8),
-       dropped=("etl.monster.creator()",))
+       dropped=("compendium.creature_maker",))
 def i3475p1(c: Cast) -> None:
     """Domination that lasts longer against one named creature.
 
@@ -1841,6 +1841,16 @@ def i3475p1(c: Cast) -> None:
     one cannot, which is harmless and is why `dropped=` stays. Not
     `defect=`, because under #600 that drops the whole entry and would
     delete a working item to record one missing clause.
+
+    **Re-pointed from `etl.monster.creator()`, which contradicted the
+    paragraph above it.** The evidence here is that the *source* has no
+    maker -- thirteen columns, none of them it, and zero pages carrying
+    the word -- and an `etl.` symbol says the opposite: that an importer
+    is failing to carry something. The two readings have opposite owners,
+    a missing importer being work we can do and a missing page not, so
+    the prefix is the whole of the claim. `compendium.` is the tree's
+    existing word for it, beside `compendium.associated_powers(f3425)`
+    and `compendium.shared_trait_ref`.
     """
     victim = c.target
     if not c.strike():
