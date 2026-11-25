@@ -59,6 +59,8 @@ Making an attack, and what the attack turns out to be.
   - "The attack misses", or it lands after all.
 - `c.landed`
   - Did the last attack hit? `c.hit()` is the damage; this is the question.
+- `c.lends_proficiency(self, weapon: 'str' = '', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "Gaining the <weapon>'s proficiency bonus to the attack roll."
 - `c.line_of_sight_from(self, square: 'Square', *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "Until the end of your next turn, you can determine your line of
 - `c.miss_lands_on(self, *, on: 'int', who: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">, kinds: 'tuple[str, ...]' = ('melee', 'ranged'), unless_attacker: 'bool' = True) -> 'Effect | None'`

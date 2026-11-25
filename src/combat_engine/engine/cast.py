@@ -4278,6 +4278,23 @@ class Cast:
         if gear is not None:
             if weapon_power and self._trained_with(gear, self._wielded()):
                 bonus += getattr(self._wielded(), "proficiency", 0)
+            # **A weapon lending its proficiency to a NON-weapon power**,
+            # which is `i2008p1`'s second clause -- *"gaining the bow's
+            # proficiency bonus to the attack roll"* on a warlock spell.
+            # `Gear.lends_proficiency` is where it lives and its note has
+            # why refs rather than groups, and why training does not gate
+            # it.
+            #
+            # **`elif`, so a weapon power cannot count it twice.** The
+            # branch above already pays the wielded weapon's own
+            # proficiency; this is the case where there is no weapon
+            # power to pay it.
+            elif gear.lends_proficiency:
+                lent = next(
+                    (w for w in gear.held
+                     if w.ref in gear.lends_proficiency), None)
+                if lent is not None:
+                    bonus += lent.proficiency
             bonus += self._enhancement_of(p)
         return bonus
 
@@ -4889,6 +4906,64 @@ class Cast:
             gear.stowed.add(arm.ref)
 
         effect.on_resume.append(rearm)
+        return effect
+
+    def lends_proficiency(
+        self,
+        weapon: str = "",
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Gaining the <weapon>'s proficiency bonus to the attack roll."
+
+        One card prints it -- `i2008p1`, a warlock spell cast through a
+        bow -- and it is the exact inverse of a case that holds by
+        construction: `Cast._attack_bonus` adds `Weapon.proficiency` only
+        for a row carrying `Keyword.WEAPON`, so an implement power never
+        gets it. `Gear.lends_enhancement`'s own note calls that the reason
+        *"you do not gain its proficiency bonus"* needs no machinery.
+
+        **By ref, not by group**, which is where this parts company with
+        `c.counts_as(enhancement=True)` beside it: that card says "an
+        implement attack with a <group>" and this one names one object,
+        the bow the item is.
+
+        Defaults to **this row's own weapon**, which is what the card
+        means by "your bow" and saves the caller repeating
+        `c.my_weapon().ref`. Returns `None` when there is no such weapon
+        in hand -- the case the audit board poses by laying this item onto
+        a greataxe, and a plant can pose on purpose.
+
+        Reversible through the effect's own `on_suspend`, the same hook
+        `c.as_weapon` and `c.as_double_weapon` use, so a discard takes the
+        lending back rather than leaving the bonus standing. #1580.
+        """
+        from .components import Gear
+
+        who = self.me if on is None else on
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        ref = weapon or getattr(self.my_weapon(), "ref", "")
+        if not ref or all(w.ref != ref for w in gear.held):
+            return None
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} lends {ref}'s proficiency", by=self.ref,
+        )
+        if effect is None:
+            return None
+
+        def lend() -> None:
+            gear.lends_proficiency.add(ref)
+
+        def take_back() -> None:
+            gear.lends_proficiency.discard(ref)
+
+        lend()
+        effect.on_suspend.append(take_back)
+        effect.on_resume.append(lend)
         return effect
 
     def as_double_weapon(

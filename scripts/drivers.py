@@ -137596,6 +137596,41 @@ def a_warlock_spell_cast_through_a_bow_takes_the_bows_range(out: Result) -> None
              " `cls` doing its older job",
              f"{printed_other} -> {now_other}")
 
+    # -- the proficiency half ----------------------------------------------
+    #
+    # Measured through `Cast._attack_bonus`, which is the one place
+    # proficiency reaches an attack roll, rather than by reading
+    # `Gear.lends_proficiency` back -- a field nothing consults is this
+    # component's commonest bug and reading it would assert only that the
+    # verb wrote it.
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.types import Ability
+
+    w3, me3, gear3 = staged()
+    bare = _Cast(world=w3, me=me3, ref=hit_ranged)._attack_bonus(Ability.CHA)
+    use(w3, me3, ROW, spend=False)
+    lent = _Cast(world=w3, me=me3, ref=hit_ranged)._attack_bonus(Ability.CHA)
+    prof = gear3.weapons[0].proficiency
+    out.that(prof > 0,
+             "premise: the staged bow has a proficiency bonus to lend",
+             f"proficiency={prof}")
+    out.that(lent == bare + prof,
+             "a warlock spell now adds the BOW's proficiency -- the card's"
+             " second clause, and the inverse of the case that holds by"
+             " construction, since an implement power never gets one",
+             f"{bare} -> {lent}, bow's proficiency {prof}")
+
+    w4, me4, _ = staged()
+    use(w4, me4, ROW, spend=False)
+    use(w4, me4, hit_ranged, spend=False)
+    after = _Cast(world=w4, me=me4, ref=hit_ranged)._attack_bonus(Ability.CHA)
+    out.that(after == bare,
+             "and the lending goes with the cast, not at the encounter's"
+             " end -- the card gives both halves to one spell, so a bow"
+             " still lending its proficiency afterwards would be strictly"
+             " better than print and silent",
+             f"{lent} during, {after} after")
+
     # -- spent on the cast it was bought for -------------------------------
     w2, me2, _ = staged()
     use(w2, me2, ROW, spend=False)

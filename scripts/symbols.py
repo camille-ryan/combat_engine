@@ -76,6 +76,11 @@ CATEGORIES: dict[str, dict] = {
                 "add_target", "drop_target", "extra_target",
                 "also_hits", "as_basic", "as_implement",
                 "as_double_weapon", "as_ranged", "as_though_hit_by",
+                # Beside `as_weapon` because they are the two halves of one
+                # question -- what a weapon lends a row that is not a weapon
+                # power. `c.counts_as(enhancement=True)` is the group-keyed
+                # sibling; this one is keyed by ref.
+                "lends_proficiency",
                 "as_weapon", "attack",
                 "attack_with", "attacks_defence", "autohit", "basic",
                 "becomes_burst",

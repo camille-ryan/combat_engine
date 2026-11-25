@@ -3008,6 +3008,29 @@ class Gear:
     #: implement power does not, so *"you do not gain its proficiency
     #: bonus"* holds by construction.
     lends_enhancement: set[str] = field(default_factory=set)
+    #: Weapons whose **proficiency bonus** a non-weapon power may add, by
+    #: weapon **ref**.
+    #:
+    #: `lends_enhancement` above is the same shape one column over and the
+    #: difference is deliberate: that one holds weapon *groups*, because
+    #: its cards say "an implement attack with a <group>", and this one
+    #: holds refs, because its card names one object -- *"you cast the
+    #: spell through your bow"* (`i2008p1`).
+    #:
+    #: **The exact inverse of a case that holds by construction.**
+    #: `Cast._attack_bonus` adds `Weapon.proficiency` only for a row
+    #: carrying `Keyword.WEAPON`, so an implement power never gets it --
+    #: which `lends_enhancement`'s own note calls the reason *"you do not
+    #: gain its proficiency bonus"* needs nothing. One card prints the
+    #: opposite and this is where it lives.
+    #:
+    #: **Not gated on training**, which was the other reading and is
+    #: wrong here: the card *grants* the bonus, and a warlock casting
+    #: through a bow is very unlikely to be trained with bows, so gating
+    #: it would make the clause inert for exactly the character the card
+    #: is written for. `_trained_with` still governs the ordinary weapon
+    #: path beside it. #1580.
+    lends_proficiency: set[str] = field(default_factory=set)
     #: This creature's **arena weapons**, by ref.
     #:
     #: `cf:fighter-weaponmaster-f3s0` prints *"you select two weapons as

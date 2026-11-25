@@ -1089,7 +1089,6 @@ def i2008x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Gear.lends_proficiency",),
 )
 def i2008p1(c: Cast) -> None:
     """The range half of casting a warlock spell through this bow.
@@ -1122,12 +1121,19 @@ def i2008p1(c: Cast) -> None:
     a `PowerUsed` watch ends it on the first qualifying cast, so the
     daily pays once.
 
-    **What stays marked is the proficiency**, `Gear.lends_proficiency`.
-    `Cast._attack_bonus` adds `Weapon.proficiency` only when the row
-    carries `Keyword.WEAPON`, so an implement spell never gets it -- which
-    is right for every other card, and `Gear.lends_enhancement`'s note
-    says the inverse case *"holds by construction"*. This card is the
-    exception and wants the same shape one field over.
+    **The proficiency half is written too**, through
+    `c.lends_proficiency()`. `Cast._attack_bonus` adds
+    `Weapon.proficiency` only when the row carries `Keyword.WEAPON`, so
+    an implement spell never gets it -- which is right for every other
+    card, and `Gear.lends_enhancement`'s note says the inverse case
+    *"holds by construction"*. This card is the exception, so it is the
+    same shape one field over, keyed by **ref** rather than group because
+    the card names one object.
+
+    Not gated on training, deliberately: the card *grants* the bonus, and
+    a warlock casting through a bow is unlikely to be trained with bows,
+    so gating it would make the clause inert for the very character the
+    card is written for.
 
     **The audit board cannot pose this**, which is worth writing down
     before somebody reads the silence as a fault: it lays this item onto
@@ -1167,8 +1173,16 @@ def i2008p1(c: Cast) -> None:
             return
         if row.reach_of().kind not in ("ranged", "area_burst"):
             return
-        c.world.effects.end(held, f"{c.ref}: spent")
+        # **Both halves, not only the reshape.** The card gives the range
+        # and the proficiency to the same one spell, so a `spent` that
+        # ended the reshape alone would leave the bow lending its
+        # proficiency to every later implement attack of the encounter --
+        # strictly better than print, and silent.
+        for hold in (held, lent):
+            if hold is not None:
+                c.world.effects.end(hold, f"{c.ref}: spent")
 
+    lent = c.lends_proficiency(bow.ref, on=c.me, until=When.ENCOUNTER)
     c.watch(PowerUsed, spent, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
