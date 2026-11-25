@@ -185,17 +185,71 @@ A parameter in a marker usually implies a mechanism -- `c.extra_action
   would be refused downstream anyway -- `#1553` is the worked case, and
   the fix was to assert the pool at unit level.
 
+## Where it stands, end of 2026-11-25
+
+```
+feat/item rows owed       49      (51 at the start of the day)
+  THE TAIL               34
+  deferred by ruling     15       etl/source 8, story 4, ship 2, parked 1
+```
+
+Finished: `f443`, `f3768`, `f951`, `f1252`, `i2008p1`, `i2359x1`,
+`i3305p1`, **`i1066p1`**, **`i3560x1`**. Six markers re-pointed to the
+right layer, and one engine bug found behind them -- `#1591`, 47 stat
+blocks that could not move.
+
+### The mis-marking seam is mined out, and this is the measurement
+
+**21 of the 34 tail notes were read end to end.** Early on the hit rate
+was extraordinary -- 4 of the first 8 `etl.*` symbols were really source
+or chargen gaps (`#1590`), and two rows were writable as they stood. It
+then went to zero: every one of the last dozen is accurately marked and
+wants a genuine engine feature. Worked examples, so nobody re-reads them:
+
+| row | verdict on the marker |
+|---|---|
+| `i2305p1` | correct -- needs a pre-event substitution door |
+| `i2208p2` | correct -- no action by which a creature *touches* a thing |
+| `i1761p1` | correct -- the crit rider's faces die inside a `Mod.roll()` closure |
+| `f3292` | correct -- `Target` has no side for a square |
+| `i3470p1` | correct, and unbuildable as named: *"or through it"* is a **line**, and `query.can_hear` is deliberately not a line test |
+| `i509x1` | correct **and moot** -- `i509p1` carries `defect=`, so `dsl.entry_defect` drops the whole item and the facility would not make the row reachable |
+| `f2472` | correct -- the row plays; the missing tie has nothing to stop, since `rt:r20-t2` is `_inert` |
+| `f1555` | correct -- nothing records *which* creature a shape mimics |
+| `f1134`, `f1307` | correct, each re-aimed several times already |
+| `f2580` | triage.json says `mis-marked`; the row's **newer** note refutes it with three sub-gaps |
+| `i1145p1`, `x2_117` | `Scenery.defences` is *satisfied* (`#1563`); the real blockers are no `Side` and the region interface (`#1393`) |
+| `i2714p1` | correct, and the obvious fix is wrong -- adding `Companion` would strip the creature's turn |
+
+So **do not plan another triage pass.** The remaining tail is one engine
+facility per row, each owing a WIDE audit. `query.speed(mode=)` was the
+last shared lever and it is spent.
+
+### The ETL batch is three jobs now
+
+| | one-line shape |
+|---|---|
+| `f1962` | a queryable `feat_power` edge table -- `#1481` specifies it |
+| `i1700x1` | a `rules_break` table, as `#1001` built `rules_dc` -- `#1471`, ruled |
+| `f3435` | **one entry** in `etl/power.py`'s `_KEYWORDS`: `varies` -- `#1592` |
+
+All three are "extract something the compendium holds into `game.db`", so
+one rebuild covers them. The third is new and the cheapest thing on this
+page.
+
 ## Owed
 
-Updated 2026-11-25. The six commits this described were swept and
-pushed; **one** is unpushed now, `23ef1aa9`, and it touches
-`content/items/` and `scripts/drivers.py` only -- no `engine/`, no
-`etl/`, no `scripts/audit.py`. So the audit map could narrow it rather
-than refuse, and what it owes before a push is the wide sweep every push
-owes, not one forced by a WIDE path.
+Clean and pushed at `3f3e9e62`. Nothing is unpushed.
 
-The new `drivers` rule is `species_by_ref`, and adding a rule means
-running the **suite**, not the rule: a new key passing says nothing about
-the registry it was added to. `--tries 40` is the per-commit size.
+Two instruments are red and **neither is a regression**:
+`bonuses` with the same 5 rows for eleven sweeps (`#1554`), and `audit`
+on the `cf:warlord-marshal-f3` fork, which `audit.py`'s own comment
+records as alternating every run -- the list has two states and the row
+has three, so either choice reddens half the time and the baseline
+records what is true today.
+
+Adding a `drivers` rule means running the **suite**, not the rule: a new
+key passing says nothing about the registry it was added to. `--tries 40`
+is the per-commit size.
 
 ETL and the rebuild stay deferred per the standing order and `#1471`.
