@@ -1897,8 +1897,7 @@ _SENSES_THE_CLOAK = frozenset({
 
 
 @power("i3560x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.truesight(of=, within=)",))
+       reach=PERSONAL, target=SELF)
 def i3560x1(c: Cast) -> None:
     """Both printed clauses turn on one species, and a species is not a type
     word -- `_SENSES_THE_CLOAK` above has where it does and does not exist.
@@ -1908,19 +1907,27 @@ def i3560x1(c: Cast) -> None:
 
     **The marker said `etl.monster.species` and that was wrong.** It blamed
     ETL for a word the printed page does not carry, so no importer could
-    ever have cleared it and the row would have waited forever. What is
-    genuinely missing is one square count: `c.truesight(of=)` names a
-    creature at **any** distance and its own docstring says `radius` is
-    ignored beside `of=`, so the printed 20-square limit cannot be said.
-    The symbol borrows `within=` from `c.see_invisible`, which is the
-    parameter already meaning exactly this and the one `truesight` lacks --
-    naming `radius=` instead made `todo.py` report the symbol ARRIVED,
-    since both parameters do exist and it is only their combination that
-    does not.
+    ever have cleared it and the row would have waited forever.
 
-    The over-grant is a sliver. The largest board in use is 24x16, so the
-    furthest two creatures can stand is 23 squares; on the audit board
-    (20x16) the maximum is 19 and the clause cannot bite at all. #570.
+    **The row is finished now, and the last thing it waited on was one
+    square count.** `c.truesight(of=)` named a creature at any distance and
+    ignored `radius` beside `of=`, so the printed 20 could not be said. It
+    is a third key -- `truesight_within:<eid>`, read by
+    `query.sees_through` -- rather than a second meaning for the value the
+    existing key stores, because twenty-odd callers pass `of=` with no
+    radius and land on a stored **1**: reading that as a distance would
+    have cut every one of them to a single square while each still fired.
+
+    The clause it buys is small and it is the card's: the largest board in
+    use is 24x16, so the furthest two creatures can stand is 23 squares and
+    the printed 20 differs from "any distance" only in that corner.
+
+    **The row's own 20 is therefore not assertable on the audit board**,
+    which is 20x16 and caps distance at 19 -- so `drivers.species_by_ref`
+    proves the *mechanism* at a radius it can stage instead, seeing through
+    at the edge and not one square past it. Said here because an arm that
+    cannot fail is worse than an absent one, and a reader expecting this
+    row's literal 20 to be covered would not find it. #570.
 
     The sensing is laid **per creature**, not on the wearer, because
     `query.unseen_by` asks it of the *watcher*: it is that creature which
@@ -1932,7 +1939,7 @@ def i3560x1(c: Cast) -> None:
     for who in query.creatures(c.world):
         ident = c.world.get(who, Ident)
         if ident is not None and ident.ref in _SENSES_THE_CLOAK:
-            c.truesight(of=c.me, on=who, until=When.ENCOUNTER)
+            c.truesight(20, of=c.me, on=who, until=When.ENCOUNTER)
 
     def not_excluded(ctx: dict[str, Any]) -> bool:
         who = ctx.get("target")

@@ -138289,6 +138289,61 @@ def a_species_exclusion_is_gated_by_ref(out: Result) -> None:
              " handing every watcher sight",
              f"{CONTROL}")
 
+    # **The radius, proved at a distance this board can stage.** The row
+    # prints 20 and the audit board is 20x16, so the furthest two creatures
+    # can stand is 19 -- the printed limit can never bite here, and an arm
+    # written at 20 would pass without testing anything. So the *mechanism*
+    # is asserted instead, on a fresh pair at a radius the grid can hold:
+    # seen at the edge, unseen one square past it. Without this, nothing
+    # separates `truesight_within:<eid>` from the unlimited
+    # `truesight:<eid>` it was added beside.
+    from combat_engine.engine.components import Position
+
+    w2, me2, _e2 = _board("i3560x1", 1)
+    foes2 = query.enemies(w2, me2)
+    seer, hidden = foes2[0], me2
+    anchor = w2.get(hidden, Position)
+    spot = w2.get(seer, Position)
+    REACH = 4
+    placed = False
+    if anchor is not None and spot is not None:
+        want = (anchor.square[0] + REACH, anchor.square[1])
+        if w2.grid.inside(want) and w2.grid.occupant(want) in (None, seer):
+            w2.grid.lift(seer)
+            spot.square = want
+            w2.grid.place(seer, frozenset({want}))
+            placed = True
+    out.that(placed and query.distance_between(w2, seer, hidden) == REACH,
+             f"the premise for the radius: a watcher stands exactly {REACH}"
+             " squares off, staged through the grid and the component"
+             " together",
+             f"placed={placed} d={query.distance_between(w2, seer, hidden)}")
+    if not placed:
+        return
+    c2 = Cast(world=w2, me=hidden, ref=ROW)
+    c2.hide()
+    c2.truesight(REACH, of=hidden, on=seer)   # until= defaults to ENCOUNTER
+    out.that(query.sees_through(w2, seer, hidden),
+             f"a watcher granted truesight of one creature within {REACH}"
+             f" sees it at exactly {REACH} squares -- the inclusive edge the"
+             " printed 'within N' means",
+             "")
+    away = (anchor.square[0] + REACH + 1, anchor.square[1])
+    if w2.grid.inside(away) and w2.grid.occupant(away) in (None, seer):
+        w2.grid.lift(seer)
+        spot.square = away
+        w2.grid.place(seer, frozenset({away}))
+        out.that(not query.sees_through(w2, seer, hidden),
+                 "and loses it one square further out, which is the whole"
+                 " of what the third key buys over the unlimited one it"
+                 " sits beside",
+                 f"d={query.distance_between(w2, seer, hidden)}")
+    else:
+        out.that(False,
+                 "the board can stage one square past the radius -- the"
+                 " premise for the negative half",
+                 f"{away}")
+
     vs_marked = skills.modifier(world, me, "intimidate", target=marked)
     vs_plain = skills.modifier(world, me, "intimidate", target=plain)
     vs_nobody = skills.modifier(world, me, "intimidate")

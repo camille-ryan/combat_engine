@@ -3823,6 +3823,19 @@ def sees_through(world: World, watcher: int, who: int) -> bool:
         return False
     if mods.total(f"truesight:{who}", {}) > 0:
         return True
+    # **One named creature, within a distance** -- the third shape, and the
+    # one neither key above can say: `truesight` measures from the watcher
+    # and ignores who, `truesight:<eid>` names a creature at any range.
+    # `i3560x1` prints both halves at once.
+    #
+    # A separate key rather than a second meaning for the value stored
+    # above, because twenty-odd callers pass `of=` with no radius and store
+    # `max(1, radius)` of 1 -- reading that as a distance would have cut
+    # every one of them to one square, silently, with each row still
+    # firing.
+    close = mods.total(f"truesight_within:{who}", {})
+    if close > 0 and distance_between(world, watcher, who) <= close:
+        return True
     reach = mods.total("truesight", {})
     if reach > 0 and distance_between(world, watcher, who) <= reach:
         return True

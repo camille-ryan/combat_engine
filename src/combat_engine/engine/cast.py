@@ -22199,12 +22199,34 @@ class Cast:
         unseen, which is what the sentence is bought for.
 
         A sense of yours, so it defaults to the **caster** like
-        `c.see_invisible`. `radius` is ignored when `of` is given.
+        `c.see_invisible`.
+
+        **`of=` and a radius together are the third shape, and `radius` used
+        to be ignored beside `of`.** *"While you wear this cloak and you are
+        within 20 squares of <a creature>, that creature knows your
+        location"* -- `i3560x1` -- names a creature **and** a distance, so
+        neither of the two keys above could say it: `truesight` measures from
+        the watcher and ignores who, `truesight:<eid>` names one creature at
+        any distance.
+
+        Written as a **third key**, `truesight_within:<eid>`, rather than by
+        giving the existing one's value a second meaning. Twenty-odd callers
+        pass `of=` with no radius and land on `max(1, radius)` of **1**, so
+        reading that stored int as a distance would silently have narrowed
+        every one of them to a single square -- which is the shape of
+        regression nothing here would have reported, since each of those rows
+        would still fire.
         """
         who = on if on is not None else self.me
-        what = f"truesight:{of}" if of is not None else "truesight"
+        if of is not None:
+            named = (
+                f"truesight_within:{of}" if radius > 0 else f"truesight:{of}"
+            )
+            return self.bonus(
+                named, max(1, radius), on=who, until=until, kind=self.ref,
+            )
         return self.bonus(
-            what, max(1, radius), on=who, until=until, kind=self.ref,
+            "truesight", max(1, radius), on=who, until=until, kind=self.ref,
         )
 
     def light(
