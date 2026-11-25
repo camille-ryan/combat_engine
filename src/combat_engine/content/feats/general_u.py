@@ -570,7 +570,7 @@ def f3434(c: Cast) -> None:
 
 @power("f3435", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("etl.power.keywords(varies)",))
+       todo=("cf:sorcerer-f0s3",))
 def f3435(c: Cast) -> None:
     """One hold left, and the missing trigger is no longer it.
 
@@ -602,9 +602,22 @@ def f3435(c: Cast) -> None:
     not a single chokepoint, and the count is what would decide whether
     it is worth it. #1571.
 
-    **The count was taken and it moves the symbol a layer down, to
-    `etl.power.keywords(varies)`.** Not a header field to invent: a
-    keyword the page already prints and this build drops.
+    **The count was taken, and it found TWO gaps rather than one. The
+    cheaper one is closed; this row waits on the other.**
+
+    The first was a keyword the page prints and this build dropped --
+    `Varies`, sitting where every damage-type keyword sits, on 68
+    compendium powers and reaching `game.db` on none of them, because
+    `etl/power.py`'s `_KEYWORDS` is a whitelist and the word was not in
+    it. **That is fixed** (`#1592`): the entry is added, `Keyword.VARIES`
+    exists, and the 25 in-band rows that print it declare it, so
+    `keywords.py` reconciles at 0 omissions. A full-corpus A/B over 9,409
+    power rows moved exactly 68, every one gaining exactly `varies`, none
+    losing anything.
+
+    So *which* powers have a variable energy type is now answerable, and
+    this row still cannot be written -- which is the part worth having
+    written down.
 
     *"A variable energy type"* is a **printed keyword**, and it sits where
     every damage-type keyword sits -- after the semicolon on the keyword
@@ -617,30 +630,47 @@ def f3435(c: Cast) -> None:
               p1163  p5848  p10319  p10321  p13425
         the same powers in `game.db`'s `keywords`       0
 
-    Zero, because `etl/power.py`'s `_KEYWORDS` is a **whitelist** of 46
-    words and `varies` is not among them, so the keyword is dropped by
-    construction. One list entry is the whole fix.
+    Zero, because `etl/power.py`'s `_KEYWORDS` was a **whitelist** of 46
+    words and `varies` was not among them, so the keyword was dropped by
+    construction.
 
-    **Two wrong answers on the way here, both worth recording.** First:
-    that the set lives in the bodies, which the paragraph above argues --
-    it reasoned from rows that *choose* a damage type and found 23 of
-    them, where this card is about one that **varies**, and those are
-    different printed things. Second, and mine: re-pointed briefly to
-    `cf:sorcerer-f0s3`, on the printed Prerequisite being the Wild Magic
-    class feature. That feature is indeed undeclared -- so is Dragon Soul,
-    and `cf:sorcerer-f0` names both -- but it is **not what blocks this
-    row**: `powers/sorcerer/__init__.py` established that the build *is*
-    dealt, `c.build("wild")` has always answered it, and eight rows hang
-    their Chaos Burst clause off exactly that. A missing class-feature row
-    read as a missing build there; it read as a missing prerequisite here.
+    **What is left is the energy type itself, and a wild sorcerer has
+    none.** The card's prerequisite is the Wild Magic class feature and it
+    says *"roll twice and choose either result **for the energy type**"* --
+    so it presupposes that the type is rolled. Measured:
 
-    So the trigger's two other halves are both satisfiable today --
-    `c.build("wild")` for the prerequisite, `_through_an_offered_aiming`
-    for the `f1028` melee -- and what is missing is only the keyword that
-    says which powers qualify. #1571.
+    * `c.element` reads `element:<type>` off the dealt `Build`, and
+      `chargen.BUILDS["sorcerer"]`'s `wild` leg carries
+      **`element=None`** -- as do `dragon`, `storm` and `cosmic`. Only the
+      four elemental legs swear one.
+    * so a wild sorcerer using a `Varies` power has **no** type
+      determined, and nothing anywhere rolls one. `p16222` is the plain
+      case: *"1d12 + Charisma modifier damage"* with no type printed,
+      because the type is supposed to come from the soul.
 
-    Being an `etl.` symbol, this row now belongs with the ETL batch rather
-    than the tail, under `#1471`'s ruling.
+    That mechanism is the Wild Soul, `cf:sorcerer-f0s3`, which is **not
+    declared** -- `cf:sorcerer-f0` prints *"choose either
+    `cf:sorcerer-f0s1` or `cf:sorcerer-f0s3`"* and neither of the two is in
+    the tree. `#1593`. So the symbol is that ref.
+
+    **The route here ran through two wrong answers and it is worth keeping
+    both.** The note's own premise was the first: it reasoned from rows
+    that *choose* a damage type, found 23, and concluded a header field was
+    needed per row -- where this card is about one that **varies**, which
+    is a different printed thing. Mine was the second, and it is the
+    subtler one: having found the keyword gap I concluded the Wild Soul was
+    *not* the blocker, because `powers/sorcerer/__init__.py` shows the
+    build **is** dealt and `c.build("wild")` has always answered it, with
+    eight rows hanging their Chaos Burst clause off exactly that. True, and
+    it answers the *prerequisite* question -- `c.build("wild")` is enough
+    to know the character qualifies. It does not answer the *payout*
+    question, which needs an element the build does not carry. One
+    undeclared row, two different things read off it, and I got the second
+    wrong in the course of getting the first right.
+
+    So the trigger's halves are satisfiable today -- `c.build("wild")` and
+    `_through_an_offered_aiming` -- the keyword that says which powers
+    qualify is **landed**, and what remains is the element itself. #1571.
     """
 
 

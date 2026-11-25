@@ -83,7 +83,7 @@ _SIX_TYPES = (
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=ARCANE_IMPLEMENT,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.VARIES],
     attack=Attack(CHA, vs=REF),
 )
 def p10319(c: Cast) -> None:
@@ -105,7 +105,7 @@ def p10319(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=ARCANE_IMPLEMENT,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.VARIES],
     attack=Attack(CHA, vs=REF),
 )
 def p1163(c: Cast) -> None:
@@ -226,7 +226,7 @@ def p12467(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.WEAPON],
+    keywords=[Keyword.ARCANE, Keyword.WEAPON, Keyword.VARIES],
     attack=Attack(CHA, vs=AC),
     requires=dagger,
     requires_text="needs a dagger",

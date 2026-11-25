@@ -200,6 +200,25 @@ class Keyword(StrEnum):
     PSYCHIC = "psychic"
     RADIANT = "radiant"
     THUNDER = "thunder"
+    #: **The damage type is not fixed**, printed in the damage-type slot in
+    #: place of a type. *"A sorcerer attack power that has a variable energy
+    #: type"* -- `f3435` -- is this keyword and nothing else, and the card
+    #: that reads it had been marked as wanting a header field invented for
+    #: it.
+    #:
+    #: It belongs here rather than beside `STANCE` because the page puts it
+    #: here: every one of the **68** occurrences sits after the semicolon
+    #: that separates power-source keywords from damage-type ones, and none
+    #: is in a range slot -- `Daily Arcane , Implement ; Varies`.
+    #:
+    #: **Fifth omission of this kind, and the list above records the first
+    #: four**: `bladespell` (#319), `beast form` (#478) and `rage` (#503)
+    #: were each found one at a time, then #589 reconciled about nine more
+    #: at once. The cost is always the same shape -- the word is parsed,
+    #: found to have no member here, and dropped, so a row wanting it
+    #: reasons its way to a missing *facility* instead of a missing list
+    #: entry. #1592.
+    VARIES = "varies"
 
 
 class DamageType(StrEnum):

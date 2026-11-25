@@ -74,7 +74,7 @@ def p11399(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.VARIES],
     attack=Attack(STR, vs=FORT),
 )
 def p11400(c: Cast) -> None:

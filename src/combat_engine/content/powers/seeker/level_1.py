@@ -419,7 +419,7 @@ def p16600(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20, by_weapon=True),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.VARIES],
     attack=Attack(WIS, vs=AC),
 )
 def p9502(c: Cast) -> None:

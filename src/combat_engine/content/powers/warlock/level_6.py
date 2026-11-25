@@ -438,7 +438,7 @@ def p13956(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[*ARCANE, Keyword.ELEMENTAL],
+    keywords=[*ARCANE, Keyword.ELEMENTAL, Keyword.VARIES],
 )
 def p16265(c: Cast) -> None:
     """One type, chosen when the row is used, and the lash reads the same

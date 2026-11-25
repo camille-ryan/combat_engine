@@ -1299,7 +1299,7 @@ def i3275p1(c: Cast) -> None:
 
 
 @power("i3285p1", level=6, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF)
+       reach=PERSONAL, target=SELF, keywords=[Keyword.VARIES])
 def i3285p1(c: Cast) -> None:
     """"Once before the end of the encounter, as a minor action" is
     `c.give`: a one-shot put in the drinker's hands. The blast is walked

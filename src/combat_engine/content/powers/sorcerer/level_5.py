@@ -374,7 +374,7 @@ def p5847(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=UpTo(2),
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.RADIANT],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.RADIANT, Keyword.VARIES],
     attack=Attack(CHA, vs=REF),
 )
 def p5848(c: Cast) -> None:

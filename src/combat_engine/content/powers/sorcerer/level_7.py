@@ -66,7 +66,7 @@ _struck: list[int] = []
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=ARCANE_IMPLEMENT,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.VARIES],
     attack=Attack(CHA, vs=REF),
 )
 def p10321(c: Cast) -> None:

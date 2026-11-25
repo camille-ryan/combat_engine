@@ -708,7 +708,7 @@ def i3191x1(c: Cast) -> None:
     action=STANDARD,
     reach=Wall(5, 10),
     target=NO_TARGET,
-    keywords=[Keyword.ZONE],
+    keywords=[Keyword.ZONE, Keyword.VARIES],
 )
 def i3196p1(c: Cast) -> None:
     """`c.wall(solid=False)` is a zone in the shape of a wall, which is

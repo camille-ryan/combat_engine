@@ -172,6 +172,7 @@ def _vs_ac_or_ref(world: World, me: int, ev: Any) -> bool:
     action=MINOR,
     reach=CloseBlast(3),
     target=EACH_OTHER,
+    keywords=[Keyword.VARIES],
     attack=Attack((STR, CON, DEX), vs=REF, plus=2),
 )
 def p1448(c: Cast) -> None:

@@ -1660,6 +1660,7 @@ def i2361p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.VARIES],
     trigger="you score a critical hit on your turn",
     on=Trigger(Hit, _my_crit_on_my_turn, "you score a critical hit"),
 )
@@ -3009,6 +3010,7 @@ def i3111p1(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=ONE_CREATURE,
+    keywords=[Keyword.VARIES],
 )
 def i3115p1(c: Cast) -> None:
     """Face 4-5 reads "the first attack that hits the target", by anybody

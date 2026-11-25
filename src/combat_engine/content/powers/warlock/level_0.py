@@ -700,7 +700,7 @@ def p16258(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
+    keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON, Keyword.VARIES],
     attack=Attack(CHA, vs=REF),
     requires=holding("w3752"),
     requires_text="you must use this power with your w3752",

@@ -438,6 +438,7 @@ def i1564p1(c: Cast) -> None:
 
 @power("i3309p1", level=1, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(1, 10), target=EACH_CREATURE,
+       keywords=[Keyword.VARIES],
        attack=Attack(vs=REF, printed=4))
 def i3309p1(c: Cast) -> None:
     dtype = _element(c)

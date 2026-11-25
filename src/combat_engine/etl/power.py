@@ -124,6 +124,11 @@ _KEYWORDS = [
     # `form` does not follow it. Gains 40, loses 0, and no card comes out
     # carrying both. #589.
     "beast",
+    # **The damage type is not fixed**, printed where a damage type would
+    # go. 68 cards carry it and every one sits after the semicolon, so it
+    # is never confused with a range. Fifth omission from this list found
+    # one at a time -- see `Keyword.VARIES`. #1592.
+    "varies",
 ]
 
 #: Entries whose plain `\b<word>\b` would swallow a longer keyword that

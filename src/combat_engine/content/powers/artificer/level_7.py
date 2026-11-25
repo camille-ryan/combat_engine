@@ -202,7 +202,7 @@ def p4144(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, 10),
     target=EACH_ENEMY,
-    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.VARIES],
     attack=Attack(INT, vs=REF),
 )
 def p4145(c: Cast) -> None:

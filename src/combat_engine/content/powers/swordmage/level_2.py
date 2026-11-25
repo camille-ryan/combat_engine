@@ -92,7 +92,7 @@ def p10434(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE],
+    keywords=[Keyword.ARCANE, Keyword.VARIES],
 )
 def p12218(c: Cast) -> None:
     """The printed targets are weapons, which the board does not carry, so

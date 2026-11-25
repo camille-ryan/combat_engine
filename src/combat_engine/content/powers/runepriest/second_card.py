@@ -96,7 +96,7 @@ def p11394b(c: Cast) -> None:
     action=OPPORTUNITY,
     reach=CloseBurst(3),
     target=NO_TARGET,
-    keywords=[Keyword.DIVINE, Keyword.WEAPON],
+    keywords=[Keyword.DIVINE, Keyword.WEAPON, Keyword.VARIES],
     attack=Attack(STR, vs=WILL),
     requires=active("p11400"),
     requires_text="the p11400 power must be active",
