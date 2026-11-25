@@ -35,6 +35,7 @@ two weapons of which one is magical.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from combat_engine.content.feats.warlord_b import _covering
@@ -74,6 +75,7 @@ from combat_engine.engine import (
     Moved,
     Position,
     Powers,
+    PowerUsed,
     Ranged,
     SecondWind,
     Size,
@@ -1087,51 +1089,88 @@ def i2008x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("dsl.reshape(attack_only=)", "Gear.lends_proficiency"),
+    dropped=("Gear.lends_proficiency",),
 )
 def i2008p1(c: Cast) -> None:
-    """"You cast the spell through your bow, replacing the spell's range
-    with the range of your bow and gaining the bow's proficiency bonus to
-    the attack roll."
+    """The range half of casting a warlock spell through this bow.
 
-    **`c.cast_through()` was the wrong symbol: nothing needs building for
-    the range half.** The old note said *"nothing redirects a power
-    through a held object"*, and `dsl.reach_of` is exactly that --
-    *"this row's range **for this creature**, reshape applied"* -- whose
-    own docstring names *"a bow feat making a melee power ranged"* among
-    the fifteen cards it was built for. `c.reshape_area` is the writer
-    and it already carries every gate this card needs: `cls="warlock"`,
-    `kinds=`, and an `into` **callable** on the printed range rather than
-    a literal.
+    *"Use this power when you cast a ranged or area warlock attack spell.
+    You cast the spell through your bow, replacing the spell's range with
+    the range of your bow and gaining the bow's proficiency bonus to the
+    attack roll."*
 
-    The callable has to branch on the kind, which is the detail that
-    makes a literal impossible here: `Ranged(n)` is `Range("ranged", n)`,
-    so the distance is `size`, while `AreaBurst(n, within)` puts the
-    radius in `size` and the placement range in `within`. So a ranged
-    spell wants `size` replaced and an area spell wants `within`, and the
-    burst's own radius must survive.
+    **`c.cast_through()` was never the gap.** `dsl.reach_of` is "this
+    row's range for this creature, reshape applied", and its own
+    docstring names *"a bow feat making a melee power ranged"* among the
+    cards it was built for. `c.reshape_area` is the writer.
 
-    **What actually blocks it is an attack-only gate on the shared verb,
-    and that is not this row's to add.** The card says *"a ranged or area
-    warlock attack spell"*. `c.reshape_area` gates on class and shape and
-    nothing else, so writing this row today reshapes warlock utilities
-    too. Measured: **107 warlock attack rows of a ranged or area shape
-    and 12 non-attack ones**, so it is a 10% over-grant rather than a
-    rounding error -- and `c.reshape_area` has **26 callers across 13
-    files**, one of which (`f1028`) prints *"any ranged sorcerer attack
-    power"* and is silently over-reaching for the same reason. Widening a
-    shared verb for 26 callers is its own change with its own audit of
-    which cards say "attack".
+    **The callable branches on the kind, which is why a literal could not
+    say it.** `Ranged(n)` is `Range("ranged", n)`, so the distance is
+    `size`; `AreaBurst(n, within)` puts the radius in `size` and the
+    placement range in `within`. A ranged spell wants `size` replaced, an
+    area spell wants `within`, and the burst's own radius has to survive
+    either way.
 
-    The second symbol is the proficiency half, and its chokepoint is one
-    line: `Cast._attack_bonus` adds `Weapon.proficiency` only when
-    `weapon_power` is true, so an implement spell never gets it. That is
-    correct for every other card -- `Gear.lends_enhancement`'s note says
-    the inverse case *"holds by construction"* -- and this card is the
-    exception, so it wants the same shape one field over.
+    **`attack_only=True` is the printed word, and it is new.** The card
+    says *"attack spell"*, and `cls` plus `kinds` do not say it --
+    measured, 107 warlock rows of a ranged or area shape carry an attack
+    and **12 do not**. Without it this row would reshape a warlock
+    utility its card never mentions. #1580.
 
-    Two symbols because they are two gaps in two layers, and either could
-    land without the other. #1580."""
+    Ended on the use it was bought for rather than at the encounter's
+    end, which is `i2467p1`'s shape: the reshape is laid `ENCOUNTER` and
+    a `PowerUsed` watch ends it on the first qualifying cast, so the
+    daily pays once.
+
+    **What stays marked is the proficiency**, `Gear.lends_proficiency`.
+    `Cast._attack_bonus` adds `Weapon.proficiency` only when the row
+    carries `Keyword.WEAPON`, so an implement spell never gets it -- which
+    is right for every other card, and `Gear.lends_enhancement`'s note
+    says the inverse case *"holds by construction"*. This card is the
+    exception and wants the same shape one field over.
+
+    **The audit board cannot pose this**, which is worth writing down
+    before somebody reads the silence as a fault: it lays this item onto
+    whatever weapon the character already carries -- a greataxe on the
+    board measured -- so `c.my_weapon().ranged` is `None` and the row
+    returns early. `chargen.treasure` honours the base through
+    `_fits_base`; the audit board does not. `drivers.cast_through_a_bow`
+    stages a bow instead.
+    """
+    bow = c.my_weapon()
+    if bow is None or bow.ranged is None:
+        return
+    far = bow.ranged[0]
+
+    def through_the_bow(r: Any) -> Any:
+        if r.kind == "area_burst":
+            return replace(r, within=far)
+        return replace(r, size=far)
+
+    held = c.reshape_area(
+        through_the_bow,
+        cls="warlock",
+        kinds=("ranged", "area_burst"),
+        attack_only=True,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
+    if held is None:
+        return
+
+    def spent(ev: Any) -> None:
+        """End it on the cast it was bought for, not on being measured."""
+        if getattr(ev, "actor", None) != c.me:
+            return
+        row = get(str(getattr(ev, "power", "")))
+        if row is None or row.cls != "warlock" or row.attack is None:
+            return
+        if row.reach_of().kind not in ("ranged", "area_burst"):
+            return
+        c.world.effects.end(held, f"{c.ref}: spent")
+
+    c.watch(PowerUsed, spent, until=When.ENCOUNTER, on=c.me, label=c.ref)
+
 
 
 @power(

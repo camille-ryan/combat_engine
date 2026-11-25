@@ -11610,6 +11610,7 @@ class Cast:
         kinds: Sequence[str] = (),
         keyword: Keyword | None = None,
         cls: str = "",
+        attack_only: bool = False,
         optional: bool = False,
         retarget: Any = None,
         on: int | None = None,
@@ -11648,9 +11649,19 @@ class Cast:
         * `cls` -- "any ranged **sorcerer** attack power", which `f1028`
           prints and which no keyword says: a class is not a keyword, and
           gating on the arcane one would also catch a wizard's rows carried
-          by a multiclass feat.
+          by a multiclass feat;
+        * `attack_only` -- the **attack** in that same printed phrase,
+          which `cls` and `kinds` together still do not say. Measured on
+          the warlock, whose shapes `i2008p1` names: **107 attack rows of
+          a ranged or area shape and 12 non-attack ones**, so a card
+          reading "attack power" over-reaches by 10% without it. `f1028`
+          prints the word and was gating on class and shape alone.
 
-        With none of the three it reshapes everything the creature throws,
+          Defaults `False`, so every other caller is unchanged by
+          construction: each one's card decides, and a card that does not
+          say "attack" must not pass it. #1580.
+
+        With none of the four it reshapes everything the creature throws,
         which no card prints; passing nothing is almost certainly a mistake
         and is left legal only because refusing it here would be a second
         opinion about what the cards say.
@@ -11690,6 +11701,10 @@ class Cast:
             if cls:
                 row = REGISTRY.get(str(ctx.get("power") or ""))
                 if row is None or row.cls != cls:
+                    return False
+            if attack_only:
+                row = REGISTRY.get(str(ctx.get("power") or ""))
+                if row is None or row.attack is None:
                     return False
             return True
 

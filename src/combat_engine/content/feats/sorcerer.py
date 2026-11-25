@@ -177,10 +177,16 @@ def f1028(c: Cast) -> None:
     gear = c.world.get(c.me, Gear)
     if gear is None or not any(w.ref == "w3594" for w in gear.held):
         return
+    # **`attack_only=True` is the printed word this call used to drop.**
+    # The card reads "any ranged c128 **attack** power", and `cls` plus
+    # `kinds` do not say it: measured, 44 sorcerer rows of a ranged shape
+    # carry an attack and **2 do not** -- `p12474` and `p16240` were
+    # offered a melee aiming their card never mentions. #1580.
     c.reshape_area(
         lambda _r: Melee(1),
         kinds=("ranged",),
         cls="sorcerer",
+        attack_only=True,
         optional=True,
         on=c.me,
         until=When.ENCOUNTER,

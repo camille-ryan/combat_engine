@@ -45,7 +45,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Hold a fire open: nobody may put it out while this stands.
 - `c.origin: Square | None`
   - the square an area was aimed at.
-- `c.reshape_area(self, into: 'Callable[[Range], Range]', *, ref: 'str' = '', kinds: 'Sequence[str]' = (), keyword: 'Keyword | None' = None, cls: 'str' = '', optional: 'bool' = False, retarget: 'Any' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.reshape_area(self, into: 'Callable[[Range], Range]', *, ref: 'str' = '', kinds: 'Sequence[str]' = (), keyword: 'Keyword | None' = None, cls: 'str' = '', attack_only: 'bool' = False, optional: 'bool' = False, retarget: 'Any' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Replace the **shape** of another row's area, for as long as this lasts.
 - `c.reshape_wall(self, zone: 'int', *, keeping: 'Square | None' = None) -> 'bool'`
   - Re-lay a standing wall around one square that stays put.

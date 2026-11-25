@@ -137466,6 +137466,148 @@ def a_weapon_treated_as_double_grows_a_second_end(out: Result) -> None:
              " all, which is the case a card cannot pose and a plant can")
 
 
+def a_warlock_spell_cast_through_a_bow_takes_the_bows_range(out: Result) -> None:
+    """`i2008p1`: *"replacing the spell's range with the range of your
+    bow"*, for a ranged or area warlock **attack** spell.
+
+    **The audit board cannot pose this**, which is why the row reads
+    silent there and why this rule exists: the board lays the item onto
+    whatever weapon the character already carries -- a greataxe, measured
+    -- so `c.my_weapon().ranged` is `None` and the row returns early.
+    `chargen.treasure` honours the base through `_fits_base`; the audit
+    board does not. A bow is staged here instead.
+
+    **The rows are found by shape, not pinned by ref.** A warlock ranged
+    attack, a warlock area attack, a warlock ranged *utility* and a
+    non-warlock ranged attack are each searched for and asserted found,
+    so a corpus that renumbers or retires one of them reds the premise
+    rather than silently testing nothing.
+
+    The two negative arms are the point. `attack_only=True` is new on
+    `c.reshape_area` and the utility arm is what shows it working: 12
+    warlock rows of a ranged or area shape carry no attack, and the card
+    says "attack spell". The non-warlock arm is `cls` doing its older
+    job. #1580.
+    """
+    from dataclasses import replace
+
+    from combat_engine.engine import dsl
+    from combat_engine.engine.components import Gear, weapon_from_printed
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW = "i2008p1"
+    BOW = "w3631"          # a longbow, 20/40 -- its range is not 10
+
+    def by_shape(cls: str, kind: str, *, attacking: bool):  # noqa: ANN202
+        # **Powers only, not class features.** The card says "a ranged or
+        # area warlock attack **spell**", and the first match by ref was
+        # `cf:warlock-f1c11` -- a class feature, which `dsl.use` does not
+        # announce as a cast, so the "spent on the cast" arm could never
+        # see its `PowerUsed`.
+        for ref, p in sorted(REGISTRY.items()):
+            if not ref.startswith("p"):
+                continue
+            if getattr(p, "cls", "") != cls:
+                continue
+            r = getattr(p, "reach", None)
+            if r is None or r.kind != kind:
+                continue
+            if (getattr(p, "attack", None) is not None) is attacking:
+                return ref, p
+        return None, None
+
+    def staged():  # noqa: ANN202
+        """A board whose character actually carries the bow this item is.
+
+        **Built before the searches below**, because `REGISTRY` is empty
+        until something imports `content` and `_board` is what does --
+        searching first found nothing and crashed on `REGISTRY[None]`.
+        """
+        world, me, _ = _board(ROW, 1)
+        gear = world.need(me, Gear)
+        bow = weapon_from_printed(BOW)
+        # **`enhancement=1`, because `c.my_weapon` walks
+        # `held(what="magic")`.** A bow carrying the item ref but no plus
+        # is not magic, so the row's own `c.my_weapon()` answered None
+        # and it returned before laying anything -- which read exactly
+        # like the reshape not working.
+        gear.weapons[:] = [replace(bow, item="i2008", enhancement=1)]
+        gear.stowed.clear()
+        return world, me, gear
+
+    world, me, gear = staged()
+
+    hit_ranged, _ = by_shape("warlock", "ranged", attacking=True)
+    hit_area, _area = by_shape("warlock", "area_burst", attacking=True)
+    util_ranged, _ = by_shape("warlock", "ranged", attacking=False)
+    other_ranged, _ = by_shape("wizard", "ranged", attacking=True)
+    out.that(all((hit_ranged, hit_area, util_ranged, other_ranged)),
+             "premise: the corpus holds a warlock ranged attack, a warlock"
+             " area attack, a warlock ranged UTILITY and a non-warlock"
+             " ranged attack -- the four shapes this card distinguishes",
+             f"{hit_ranged}, {hit_area}, {util_ranged}, {other_ranged}")
+
+    bow = gear.weapons[0]
+    out.that(bow.ranged is not None,
+             "premise: the staged weapon really is a bow with a printed"
+             " range, which the audit board's own greataxe is not",
+             f"ranged={bow.ranged}")
+    far = bow.ranged[0]
+
+    def reach(world, who: int, ref: str) -> tuple:  # noqa: ANN001
+        r = dsl.reach_of(world, who, REGISTRY[ref])
+        return r.kind, r.size, r.within
+
+    printed_ranged = reach(world, me, hit_ranged)
+    printed_area = reach(world, me, hit_area)
+    printed_util = reach(world, me, util_ranged)
+    printed_other = reach(world, me, other_ranged)
+    out.that(printed_ranged[1] != far,
+             "premise: the warlock attack's printed range differs from the"
+             " bow's, or no arm below could tell them apart",
+             f"printed {printed_ranged[1]}, bow {far}")
+
+    from combat_engine.engine.dsl import use
+    use(world, me, ROW, spend=False)
+
+    now_ranged = reach(world, me, hit_ranged)
+    out.that(now_ranged[1] == far,
+             "a warlock ranged attack now reaches the BOW's range -- for a"
+             " `ranged` kind the distance is `size`",
+             f"{printed_ranged} -> {now_ranged}")
+
+    now_area = reach(world, me, hit_area)
+    out.that(now_area[2] == far and now_area[1] == printed_area[1],
+             "an area attack has its PLACEMENT range replaced and keeps"
+             " its printed radius -- `AreaBurst(n, within)` puts the"
+             " radius in `size`, so replacing that would shrink the burst",
+             f"{printed_area} -> {now_area}")
+
+    now_util = reach(world, me, util_ranged)
+    out.that(now_util == printed_util,
+             "a warlock ranged UTILITY is left alone, which is"
+             " `attack_only=True` -- the card says 'attack spell' and 12"
+             " warlock rows of these shapes carry no attack",
+             f"{printed_util} -> {now_util}")
+
+    now_other = reach(world, me, other_ranged)
+    out.that(now_other == printed_other,
+             "and a non-warlock ranged attack is left alone, which is"
+             " `cls` doing its older job",
+             f"{printed_other} -> {now_other}")
+
+    # -- spent on the cast it was bought for -------------------------------
+    w2, me2, _ = staged()
+    use(w2, me2, ROW, spend=False)
+    out.that(reach(w2, me2, hit_ranged)[1] == far, "standing before the cast")
+    use(w2, me2, hit_ranged, spend=False)
+    out.that(reach(w2, me2, hit_ranged)[1] == printed_ranged[1],
+             "and gone after one qualifying cast -- the daily pays once,"
+             " which is `i2467p1`'s shape rather than running to the end"
+             " of the encounter",
+             f"back to {reach(w2, me2, hit_ranged)}")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -140833,6 +140975,11 @@ DRIVERS = {
         a_weapon_treated_as_double_grows_a_second_end,
         "c.as_double_weapon gives a weapon with no printed second end two"
         " ends, reversibly, and refuses a printed double",
+    ),
+    "cast_through_a_bow": (
+        a_warlock_spell_cast_through_a_bow_takes_the_bows_range,
+        "i2008p1 gives a warlock ranged or area ATTACK spell the bow's"
+        " range, and leaves a utility and another class alone",
     ),
     "vampire_weaknesses": (
         a_vampires_weaknesses_and_the_feat_that_lifts_them,
