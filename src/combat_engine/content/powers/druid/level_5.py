@@ -163,7 +163,7 @@ def p10848(c: Cast) -> None:
     def open_guard(ctx: dict[str, Any]) -> bool:
         who = ctx.get("target")
         return (
-            beast_row(ctx)
+            beast_row(ctx, world=c.world, who=me)
             and who is not None
             and has_combat_advantage(c.world, me, who)
         )

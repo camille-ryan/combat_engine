@@ -138278,6 +138278,106 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def a_granted_beast_keyword_is_seen_by_the_reader(out: Result) -> None:
+    """`f2880`'s last clause: *treat it as though it has the keyword*, which
+    has to reach the package's riders and not only the refusal.
+
+    **The row's note had the diagnosis and over-priced the fix**, which is
+    the shape this tail keeps producing. It read: *"`forms.beast_row` takes
+    a `ctx` holding only `power` and reads the printed header, so a
+    per-character grant is invisible to it... the reader wants widening
+    before the grant can reach them; that is a `forms.py` change and not
+    this file's."* All true. What it did not check is that **every caller
+    already had the creature and the world to hand** -- three call sites,
+    each with both in scope, none passing them.
+
+    `dsl.keywords_of`'s own docstring had already named the fault in
+    general terms: *"Read this, never `Power.keywords` directly: a row's
+    keywords are header data."* `beast_row` read the header.
+
+    The arms that matter are the pair asking the **same** context with and
+    without the creature. Without it the answer must stay False -- a
+    caller that genuinely has no creature is asking about a row rather
+    than about a use, and making it guess would pay the riders out for
+    everybody.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import Keyword
+
+    ROW = "f2880"
+    world, me, _ev = _board(ROW, 1)
+    from combat_engine.content.powers.druid.forms import beast_row
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "the feat carries no marker, where it was"
+             " `dropped=('forms.beast_row(creature)',)`",
+             f"{REGISTRY[ROW].unfinished}")
+
+    # A row that prints the keyword, and an ordinary one that does not --
+    # picked off the registry so this rule does not name a card.
+    printed = next(
+        (r for r in sorted(REGISTRY)
+         if (p := get(r)) is not None and Keyword.BEAST_FORM in p.keywords),
+        "")
+    plain = next(
+        (r for r in sorted(REGISTRY)
+         if (p := get(r)) is not None
+         and Keyword.BEAST_FORM not in p.keywords
+         and p.requires is None
+         and p.attack is not None),
+        "")
+    out.that(bool(printed) and bool(plain),
+             "premise: the corpus holds a row printing the keyword and an"
+             " ordinary attack that does not",
+             f"{printed} vs {plain}")
+    if not printed or not plain:
+        return
+
+    out.that(beast_row({"power": printed}),
+             "a row that PRINTS the keyword is answered without a world at"
+             " all -- the declared check stays first, so the 68 rows"
+             " carrying it cost no lookup",
+             "yes")
+    out.that(not beast_row({"power": plain}),
+             "and an ordinary attack is not -- the baseline both arms below"
+             " are measured against",
+             "no")
+
+    # ---- the grant, which is the clause -------------------------------
+    c = Cast(world=world, me=me, ref=ROW)
+    c.counts_as_keyword(plain, Keyword.BEAST_FORM, on=me,
+                        until=When.ENCOUNTER)
+
+    out.that(not beast_row({"power": plain}),
+             "with the grant laid but NO creature named, the answer is"
+             " still no -- a caller asking about a row rather than a use"
+             " keeps today's answer instead of being made to guess whose"
+             " row it is",
+             "no")
+    out.that(beast_row({"power": plain}, world=world, who=me),
+             "and the SAME row named for the granted creature is a beast"
+             " form power -- *treat it as though it has the keyword*, which"
+             " is the clause, and the whole of what the widening bought",
+             "yes")
+
+    other = sorted(query.enemies(world, me))[0]
+    out.that(not beast_row({"power": plain}, world=world, who=other),
+             "while another creature's use of that same row is not -- the"
+             " grant is per character, which is the only reason it needed"
+             " the creature in the first place",
+             "no")
+
+    # ---- the ctx route, which is how the real callers reach it ---------
+    out.that(beast_row({"power": plain, "attacker": me}, world=world),
+             "and an attack context naming its attacker reaches the grant"
+             " without an explicit `who=` -- which is how two of the three"
+             " call sites pass it",
+             "yes")
+
+
 def a_wider_blast_is_paid_for_per_die(out: Result) -> None:
     """*"Before using a wizard at-will or encounter attack power, you can
     choose to take a -2 penalty to each die of damage rolled with the power
@@ -143231,6 +143331,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "granted_beast_keyword": (
+        a_granted_beast_keyword_is_seen_by_the_reader,
+        "f2880's granted keyword reaches forms.beast_row, which read the"
+        " printed header and so could not see a per-character grant",
     ),
     "wider_blast_priced": (
         a_wider_blast_is_paid_for_per_die,

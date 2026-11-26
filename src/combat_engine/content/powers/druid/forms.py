@@ -90,7 +90,9 @@ def in_form(ref: str) -> Callable[[World, int], bool]:
     return check
 
 
-def beast_row(ctx: dict[str, Any]) -> bool:
+def beast_row(
+    ctx: dict[str, Any], *, world: Any = None, who: int | None = None
+) -> bool:
     """Is the row rolling this one of the beast form ones?
 
     `ctx["power"]` is the ref of whatever is rolling -- the attack context
@@ -124,17 +126,48 @@ def beast_row(ctx: dict[str, Any]) -> bool:
     database names. The same arrangement, and the same warning,
     `Cast._rolled_above` writes down about its own pair of guards.
 
-    **What this does not reach is a keyword granted per character.**
+    **A keyword granted per character is reached now, and it needed the
+    creature.** This note used to end *"that needs the creature and two of
+    the five callers build a ctx holding only `power`. f2880 wants exactly
+    that and is still marked"* -- which was the whole of that row's gap.
     `c.counts_as_keyword` writes `Powers.granted_keywords` and
-    `dsl.keywords_of` reads it, but that needs the creature and two of the
-    five callers build a ctx holding only `power`. f2880 wants exactly that
-    and is still marked. #744.
+    `dsl.keywords_of` reads it, so `world` and `who` are what this was
+    missing; every caller had both to hand and simply was not passing
+    them.
+
+    **Reading `p.keywords` alone was the fault, and `dsl.keywords_of`'s own
+    docstring names it**: *"Read this, never `Power.keywords` directly: a
+    row's keywords are header data"*. The declared check stays first
+    because it is a frozenset membership and answers for the 68 rows that
+    print the keyword without touching the world.
+
+    Both parameters default to `None` so a caller that genuinely has no
+    creature -- a question about a row rather than about a use -- keeps
+    today's answer rather than being made to invent one. `#744`, `#1029`,
+    `#1112`.
     """
     p = get(ctx.get("power", "") or "")
     if p is None:
         return False
     if Keyword.BEAST_FORM in p.keywords:
         return True
+    # The per-character grant: `f2880` treats a borrowed racial power as
+    # though it had the keyword, which no header says and only
+    # `keywords_of` can answer.
+    actor = who if who is not None else (
+        ctx.get("attacker") or ctx.get("actor") or ctx.get("source")
+    )
+    # **The pair-guard is defensive and planting it away reddens
+    # nothing**, which is worth saying for the reason the gate paragraph
+    # above says it of itself: `keywords_of` tolerates a `None` actor and
+    # answers the declared set, so loosening this to `or` is
+    # behaviourally identical and no assertion can tell the two apart. It
+    # is here to avoid a pointless lookup, not to change an answer.
+    if world is not None and actor is not None:
+        from combat_engine.engine.dsl import keywords_of
+
+        if Keyword.BEAST_FORM in keywords_of(world, actor, p):
+            return True
     return p.requires is in_beast_form or getattr(p.requires, "beast_form", False)
 
 

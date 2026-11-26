@@ -120,7 +120,7 @@ def p10372(c: Cast) -> None:
     def retype(ev: DamageRolled) -> None:
         if ev.source != me or not in_beast_form(c.world, me):
             return
-        if not beast_row({"power": ev.detail}):
+        if not beast_row({"power": ev.detail}, world=c.world, who=me):
             return
         if ev.dtype is DamageType.POISON:
             ev.amount += max(0, c.con_mod)

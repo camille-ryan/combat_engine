@@ -567,7 +567,7 @@ def f2033(c: Cast) -> None:
 
 
 @power("f2880", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("forms.beast_row(creature)",))
+       reach=PERSONAL, target=SELF)
 def f2880(c: Cast) -> None:
     """Gives a racial trait's chosen power the printed keyword this
     package gates on.
@@ -600,15 +600,25 @@ def f2880(c: Cast) -> None:
     with it, leaving only whatever the picked card requires on its own
     account.
 
-    **What is dropped**: the card says *treat it as though it has the
-    keyword*, which should also pick up the package's "with beast form
-    powers" riders. `forms.beast_row` takes a `ctx` holding only
-    `power` and reads the printed header, so a per-character grant is
-    invisible to it -- `forms.py`'s own note records exactly this and
-    names this row. Two of its five callers pass a ctx with no creature
-    in it at all, so the reader wants widening before the grant can
-    reach them; that is a `forms.py` change and not this file's.
-    #744, #1029, #1112."""
+    **The last clause landed, and it was the reader rather than this
+    row.** The note here read: *"the card says treat it as though it has
+    the keyword, which should also pick up the package's 'with beast form
+    powers' riders. `forms.beast_row` takes a `ctx` holding only `power`
+    and reads the printed header, so a per-character grant is invisible to
+    it."* Correct, and the widening was smaller than "a `forms.py`
+    change" suggests: **every caller already had the creature and the
+    world to hand and simply was not passing them.**
+
+    `beast_row(ctx, *, world=, who=)` consults `dsl.keywords_of` when it
+    is given both, which is the per-character read -- and
+    `keywords_of`'s own docstring had already named the fault: *"Read
+    this, never `Power.keywords` directly."* Three call sites now pass
+    them; the declared-keyword check stays first, so the 68 rows that
+    print the keyword are answered without touching the world.
+
+    So *treat it as though it has the keyword* now reaches the package's
+    riders as well as `dsl.usable`'s refusal, which is the whole of what
+    was dropped. #744, #1029, #1112."""
     me = c.me
 
     def retype(pick: str) -> None:

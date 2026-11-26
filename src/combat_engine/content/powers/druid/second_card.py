@@ -205,8 +205,17 @@ def p10846b(c: Cast) -> None:
 def _beast_melee_hit(world: World, me: int, ev: Any) -> bool:
     """"You hit an enemy with a beast form melee attack."
 
-    Beast Form is not a `Keyword`, so what makes a row one of them is its
-    gate -- the same reading `forms.beast_row` takes for the damage bonuses.
+    **`Keyword.BEAST_FORM` exists**, which this docstring used to deny: it
+    read *"Beast Form is not a `Keyword`, so what makes a row one of them
+    is its gate"*, and `forms.beast_row`'s own note measures 68 rows
+    declaring it -- 21 of them with no gate at all, so the gate was a
+    strict subset and three printed level-0 beast attacks were invisible to
+    every reading. That is fixed inside `beast_row`; this note was the
+    stale half of it.
+
+    `world` and `me` are passed through so the reader can see a keyword
+    granted **per character** -- `f2880` treats a borrowed racial power as
+    though it had one, which no header says.
     """
     if ev.attacker != me or ev.target == me:
         return False
@@ -215,7 +224,7 @@ def _beast_melee_hit(world: World, me: int, ev: Any) -> bool:
         p is not None
         and p.reach is not None
         and p.reach.kind == "melee"
-        and beast_row({"power": ev.power})
+        and beast_row({"power": ev.power}, world=world, who=me)
     )
 
 
