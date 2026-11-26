@@ -1279,6 +1279,32 @@ class Aimed(Event):
 
 
 @dataclass
+class Touched(Event):
+    """A creature reached out and handled something on the board.
+
+    *"The illusion lasts ... until a creature touches it or enters its
+    space"* -- `i2208p2`. The "enters its space" half was writable from
+    `EnterSquare`; touching had no moment at all, and the row dropped it
+    for that reason.
+
+    **The printed action behind it is manipulating an object**, which is a
+    minor, and `actions._touching` is the offer. Distinct from an attack
+    on purpose: a creature may handle a thing it has no intention of
+    breaking, and three of this card's four printed ends are already
+    `attack hits it`, `end of turn` and `enters its space` -- so folding
+    touching into any of those would have made one of them mean two
+    things.
+
+    `thing` is what was handled. It carries no result, because handling
+    something is not a check: what happens is the thing's own business,
+    which is where `i2208p2` keeps its clause.
+    """
+
+    actor: int
+    thing: int
+
+
+@dataclass
 class ObjectPlaced(Event):
     """A thing that is not a creature arrived on the board.
 

@@ -67876,15 +67876,28 @@ def a_conjuration_a_creature_can_attack(out: Result) -> None:
              "i2437p1 carries no marker at all now: the card's whole second"
              " paragraph is one parameter",
              f"{REGISTRY['i2437p1'].unfinished}")
-    # **The spelling moved to match this assertion's own words.** It read
-    # `c.zone(ends_on=)` and described the gap, correctly, as "a creature
-    # touching it" -- so the prose and the symbol disagreed, and the symbol
-    # was the vaguer of the two: `ends_on=` is a parameter on the zone where
-    # what is missing is the *moment*, which nothing announces. The row now
-    # carries `actions.touch()` and the two agree.
-    out.that(REGISTRY["i2208p2"].unfinished == ("actions.touch()",),
-             "and i2208p2 keeps the one marker it still earns -- the other"
-             " way its illusion pops, which is a creature touching it",
+    # **The marker is gone and this arm is inverted rather than deleted.**
+    # It read `unfinished == ("actions.touch()",)` -- an exact tuple, and
+    # the history is the useful part: the spelling before that was
+    # `c.zone(ends_on=)`, which disagreed with this very assertion's own
+    # prose. The prose was right and the symbol was vaguer -- `ends_on=`
+    # is a parameter on the zone where what was missing is the **moment**,
+    # which nothing announced.
+    #
+    # `actions._touching` is that moment now: the printed minor for
+    # manipulating an object, narrowed to the things adjacent to the
+    # actor, announcing `Touched`. `drivers.touch_pops_an_illusion` holds
+    # the behaviour, including the arm the old note warned about -- that
+    # standing beside the illusion must not pop it.
+    #
+    # Kept as an arm because "this card owes nothing" is the thing a later
+    # change could quietly undo. Fourth time today that un-marking a row
+    # reddened an older rule, which is why `content/CLAUDE.md` says it
+    # needs the full suite.
+    out.that(not REGISTRY["i2208p2"].unfinished,
+             "and i2208p2 owes nothing now -- the other way its illusion"
+             " pops, a creature touching it, is an action rather than a"
+             " parameter on the zone",
              f"{REGISTRY['i2208p2'].unfinished}")
 
     # -- whose side the thing is on when the caster is on none -------------
@@ -123334,6 +123347,25 @@ UNNAMED_KINDS_OWED = frozenset(
         # is worse than owing it -- `is_end` is 0.001, so a zero loses to
         # ending the turn while the table claims a decision was made.
         "diversion",
+        # **`touch` is owed for a sharper reason than its neighbours**, and
+        # it is worth distinguishing. `feint` and `diversion` are deferred
+        # under `#890` because their worth is a judgement the AI cannot yet
+        # make. Touching a thing is deferred because the judgement needs
+        # **knowledge the AI does not have**: the only reason to handle an
+        # object is suspecting it is an illusion, and nothing on the board
+        # tells a creature that -- `i2208p2`'s own card gives an Insight
+        # check for exactly that purpose and the AI does not take it.
+        #
+        # So a weight here would not be a guess about tactics; it would be
+        # a claim that the AI can tell a dragon from a picture of one. A
+        # `0.0` is worse again, for the reason recorded above: `is_end` is
+        # 0.001, so a zero loses to ending the turn while the table claims
+        # the question was answered.
+        #
+        # The action exists so the *clause* is reachable -- `perform` takes
+        # a chosen `Action` and bypasses the policy entirely, which is how
+        # `drivers.touch_pops_an_illusion` drives it.
+        "touch",
         # **`surge_for_points` is owed under the same standing ruling**,
         # and the judgement is unusually sharp: it trades a healing surge
         # -- which is hit points and a second wind -- for 2 power points
@@ -138302,6 +138334,129 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def touching_an_illusion_pops_it(out: Result) -> None:
+    """*"The illusion lasts until the end of your next turn, until an attack
+    hits it, or until a creature touches it or enters its space."* --
+    `i2208p2`, whose fourth end had no moment.
+
+    The row's old note was right twice over and that is why this is an
+    action rather than a geometry test:
+
+    > *"There is no action in the menu by which a creature touches a
+    > thing, and adjacency is not it -- anything walking past would pop an
+    > illusion whose whole job is to be approached."*
+
+    `actions._touching` is the printed minor for manipulating an object,
+    narrowed to the conjurations and scenery next to the actor, because
+    those are the only things on a board there are to handle. It announces
+    `Touched` and does nothing else: what handling a thing does belongs to
+    the thing.
+
+    **The two arms that matter are the pair.** Standing beside the
+    illusion must NOT pop it -- that is the note's own warning, and the
+    card gives the thing a job of being approached -- while taking the
+    action must. Either alone passes for an implementation that pops on
+    adjacency or never pops at all.
+
+    Driven with `actions.perform`, which takes a chosen `Action` and
+    bypasses the policy: the AI is deliberately not taught to want this,
+    because the only motive is suspecting an illusion and nothing tells a
+    creature that.
+    """
+    from combat_engine.engine import actions, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conjuration, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import ActionType
+
+    ROW = "i2208p2"
+    world, me, _ev = _board(ROW, 1)
+    enc = world.encounter
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "the row carries no marker, where it was"
+             " `dropped=('actions.touch()',)`",
+             f"{REGISTRY[ROW].unfinished}")
+
+    c = Cast(world=world, me=me, ref=ROW)
+    REGISTRY[ROW].body(c)
+
+    mine = [eid for eid, _c in world.each(Conjuration)]
+    out.that(len(mine) == 1,
+             "the row stands its illusion up -- the premise, and it is a"
+             " conjuration rather than a creature, which is what makes it"
+             " a thing to handle",
+             f"{len(mine)}")
+    if len(mine) != 1:
+        return
+    illusion = mine[0]
+
+    def alive_still() -> bool:
+        conj = world.get(illusion, Conjuration)
+        held = world.effects.live.get(conj.effect) if conj is not None else None
+        return held is not None and not held.ended
+
+    out.that(alive_still(), "premise: it is standing", "up")
+
+    # ---- adjacency alone must NOT pop it -------------------------------
+    seat = world.need(illusion, Position).square
+    beside = (seat[0] + 1, seat[1])
+    foe = sorted(query.enemies(world, me))[0]
+    world.grid.lift(foe)
+    world.need(foe, Position).square = beside
+    world.grid.place(foe, frozenset({beside}))
+    out.that(alive_still(),
+             "a creature STANDING beside it does not pop it -- the note's"
+             " own warning, and the half an adjacency test would have got"
+             " wrong: an illusion's whole job is to be approached",
+             "still up")
+
+    # ---- and the action does --------------------------------------------
+    # **Its own turn**, because `can_spend` refuses any action to a
+    # creature that is not the one acting -- so the offer is invisible
+    # otherwise and the arm below failed on staging rather than on the
+    # action. The idiom five other rules here use.
+    world.turn = foe
+
+    # **A creature far from it is offered nothing**, which the adjacent
+    # staging cannot show: widening the range to 99 reddened no arm until
+    # this one existed, because the only toucher was already next to it.
+    far_off = sorted(query.enemies(world, me))[1]
+    corner = (world.grid.width - 2, world.grid.height - 2)
+    world.grid.lift(far_off)
+    world.need(far_off, Position).square = corner
+    world.grid.place(far_off, frozenset({corner}))
+    world.turn = far_off
+    out.that(not [
+        a for a in actions.legal(world, enc, far_off)
+        if a.kind == "touch" and illusion in a.targets
+    ],
+             "a creature well away from it is offered no touch at all --"
+             " reaching out is adjacent or nothing, which is the printed"
+             " minor and not a ranged interaction",
+             f"{query.distance_between(world, far_off, illusion)} squares")
+    world.turn = foe
+    offers = [
+        a for a in actions.legal(world, enc, foe)
+        if a.kind == "touch" and illusion in a.targets
+    ]
+    out.that(bool(offers),
+             "while the TOUCH action is offered to it -- a minor, which is"
+             " the printed cost of manipulating an object",
+             f"{len(offers)} offer(s)")
+    if not offers:
+        return
+    out.that(offers[0].cost is ActionType.MINOR,
+             "and it costs a minor",
+             f"{offers[0].cost}")
+
+    actions.perform(world, enc, foe, offers[0])
+    out.that(not alive_still(),
+             "and taking it pops the illusion -- the fourth printed end,"
+             " which had no moment at all before the action existed",
+             "gone")
+
+
 def a_crit_riders_faces_can_be_rerolled_after_the_fact(out: Result) -> None:
     """`i1761p1` rerolls *"the weapon dice and the critical dice"*, and the
     second half had nowhere to read from.
@@ -144137,6 +144292,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "touch_pops_an_illusion": (
+        touching_an_illusion_pops_it,
+        "i2208p2's illusion ends when a creature TOUCHES it, which is an"
+        " action and not adjacency (#714)",
     ),
     "crit_faces_reroll": (
         a_crit_riders_faces_can_be_rerolled_after_the_fact,

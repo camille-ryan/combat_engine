@@ -1920,7 +1920,7 @@ def i2208p1(c: Cast) -> None:
 
 @power("i2208p2", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(40), target=NO_TARGET, keywords=[Keyword.ILLUSION],
-       dropped=("actions.touch()",))
+)
 def i2208p2(c: Cast) -> None:
     """The illusion stands on the board as a conjuration, sustained by a
     minor.
@@ -1970,12 +1970,34 @@ def i2208p2(c: Cast) -> None:
     than being hung on the conjuration's own `When.SUSTAIN` -- a second hold
     at that duration would print a second sustain cost the card does not.
 
-    Still dropped: "until a creature touches it". There is no action in the
+    **"Until a creature touches it" is written now, and the old note was
+    right about why it could not be.** It read: *"there is no action in the
     menu by which a creature touches a thing, and adjacency is not it --
     anything walking past would pop an illusion whose whole job is to be
-    approached.
+    approached."* Both halves hold, and the second is the reason this is
+    an **action** rather than a reading of where somebody stands.
+
+    `actions._touching` is that action -- the printed minor for
+    manipulating an object, narrowed to the conjurations and scenery
+    adjacent to the actor, because those are the only things on a board
+    there are to handle. It announces `Touched` and does nothing else:
+    what handling a thing *does* belongs to the thing, which is this
+    clause.
+
+    **Not folded into the attack half.** This card already ends on *"an
+    attack hits it"*, which `defences=10` and one hit point give it; a
+    creature that handles the illusion without trying to break it is a
+    different sentence, and one event meaning both would have made the
+    four printed ends into three.
+
+    The AI is not taught to want it, and `drivers.kinds_named` records a
+    sharper reason than for its neighbours: the only motive for touching
+    something is suspecting it is an illusion, and nothing tells a
+    creature that. The card's own Insight check is that knowledge and the
+    AI does not take it. So the clause is reachable by a chosen action
+    rather than a scored one.
     """
-    from combat_engine.engine.events import EnterSquare
+    from combat_engine.engine.events import EnterSquare, Touched
 
     where = _free_near(c, of=c.me)
     if where is None:
@@ -2001,6 +2023,13 @@ def i2208p2(c: Cast) -> None:
         c.world.effects.end(hold, f"{c.ref}: a creature entered its space")
 
     c.watch(EnterSquare, entered, until=When.ENCOUNTER, label=f"{c.ref} entered")
+
+    def handled(ev: Touched) -> None:
+        if ev.thing != illusion or hold is None or hold.ended:
+            return
+        c.world.effects.end(hold, f"{c.ref}: a creature touched it")
+
+    c.watch(Touched, handled, until=When.ENCOUNTER, label=f"{c.ref} touched")
 
 
 @power("i3469x1", level=8, cls=ITEM, action=ActionType.NONE,

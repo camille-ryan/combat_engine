@@ -174,6 +174,7 @@ def legal(
     out.extend(_readying(world, encounter, actor))
     out.extend(_feinting(world, encounter, actor))
     out.extend(_diverting(world, encounter, actor))
+    out.extend(_touching(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     # **An allowance keeps only the costs it names.** `query.can_act`
@@ -775,6 +776,52 @@ def _bluff_beneficiary(world: World, actor: int, cast: Any) -> int:
         return actor
     picked = cast.choose([actor, *pool], "who gains the benefit of the bluff")
     return picked if picked in (actor, *pool) else actor
+
+
+def _touching(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Reach out and handle something standing next to you. A minor action.
+
+    **The printed action is manipulating an object**, which is a minor, and
+    this is the narrow case of it: there is nothing on a board to
+    manipulate *except* the things rows put there, so the pool is the
+    conjurations and scenery adjacent to the actor.
+
+    `i2208p2` is the card that wanted it -- *"the illusion lasts ... until
+    a creature touches it or enters its space"* -- and its note is exact
+    that adjacency is **not** the moment: *"anything walking past would
+    pop an illusion whose whole job is to be approached."* So this is a
+    deliberate act, offered and taken, rather than a fact about where
+    somebody is standing.
+
+    **Not an attack, and that distinction is the whole reason it is a
+    separate kind.** The same card already ends on *"an attack hits it"*,
+    which `defences=10` and one hit point give it; a creature that handles
+    a thing without trying to break it is a different sentence, and
+    folding the two together would have made one of them mean both.
+
+    Offered for a creature's own **conjurations and scenery alike**: both
+    are things on the board with a `Position` and neither is a creature,
+    which is what "an object" means here. A creature is excluded -- there
+    is no printed minor action for touching a person, and inventing one
+    would put a menu entry on every pair of adjacent creatures in the
+    game.
+    """
+    from .components import Conjuration, Position, Scenery
+    from .query import distance_between
+
+    if not encounter.can_spend(actor, ActionType.MINOR):
+        return []
+    handled = sorted(
+        {eid for eid, _c in world.each(Conjuration)}
+        | {eid for eid, _s in world.each(Scenery)}
+    )
+    return [
+        Action(kind="touch", cost=ActionType.MINOR, targets=(thing,))
+        for thing in handled
+        if thing != actor
+        and world.get(thing, Position) is not None
+        and distance_between(world, actor, thing) <= 1
+    ]
 
 
 def _diverting(world: World, encounter: Encounter, actor: int) -> list[Action]:
@@ -4123,6 +4170,18 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # else -- `clear_source` would reveal it to the whole board, which
         # is a different and much stronger outcome than the card gives.
         world.relations.clear(Relation.HIDDEN_FROM, quarry, actor, "spotted")
+        return True
+
+    if action.kind == "touch":
+        from .events import Touched
+
+        if not action.targets:
+            return False
+        # Announced and nothing else. What touching a thing *does* belongs
+        # to the thing -- `i2208p2` keeps its own clause on a watch -- and
+        # a branch that popped conjurations here would be the engine
+        # deciding what every row's object is made of.
+        world.bus.emit(Touched(actor=actor, thing=action.targets[0]))
         return True
 
     if action.kind == "diversion":
