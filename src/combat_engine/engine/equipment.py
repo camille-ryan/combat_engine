@@ -278,6 +278,17 @@ def _crit_rider(world, eid: int, magic: Magic) -> None:  # noqa: ANN001
                                 old=old, new=faces[at])
                 said.replaced = True
                 world.bus.emit(said)
+        # **Kept for the blow, so a reactive reroll can reach them.**
+        # `i1761p1` is a daily spent *after* seeing the number, and
+        # `_may_reroll_a_crit_die` above is a standing hold -- read here,
+        # before anything is announced -- so it cannot serve that card.
+        # Recorded rather than announced for `#703`'s reason: a field on
+        # `DamageRolled` would move every fixture line.
+        from .components import CritFaces
+
+        kept = world.get(eid, CritFaces) or world.add(eid, CritFaces())
+        kept.faces = list(faces)
+        kept.size = int(size.group(1)) if size else 0
         return sum(faces) + flat
 
     mods.items.append(

@@ -1625,7 +1625,6 @@ def i1761x1(c: Cast) -> None:
     target=SELF,
     trigger="you make a damage roll and dislike the result",
     on=Trigger(DamageRolled, by_me, "you roll damage"),
-    dropped=("c.reroll_faces(crit_dice=)",),
 )
 def i1761p1(c: Cast) -> None:
     """Rerolls the weapon dice of a roll already made, and keeps the second.
@@ -1702,10 +1701,33 @@ def i1761p1(c: Cast) -> None:
     `i2299x1`'s note has the rest of the measurement, including why a
     `when=` gate on the crit is unreachable by construction.
 
+    **The crit half is written now, and the measurement that was missing
+    is why.** The note above is exact that the rider's faces never reach
+    `DamageRolled` -- `_roll_damage_dice` returns `None` on a critical and
+    the "+1d6 per plus" is summed inside a `Mod.roll()` closure. What it
+    did not say is that the closure is **not speculative**: its own
+    docstring records that `Mod.roll` is called once per read, which is
+    once per critical hit. So the faces can be kept for the blow, which
+    `components.CritFaces` does, and a reactive reroll can reach them.
+
+    **And the arithmetic needed one fact before it could be right.** The
+    rider's sum is inside `resolve`'s `whole`, and `_priced` halves that
+    with everything else -- so adding the difference to `ev.amount` is
+    wrong whenever the blow is halved, and `ev.amount` is then `got // 2`
+    and not invertible. `ev.recrit` carries the pre-halving total and
+    applies the halving itself. Checked in `deal_damage` rather than
+    assumed: `extra = whole - reprice(roll.total)` is where the rider
+    already sits.
+
+    So one call per half of the printed sentence, and neither is a
+    standing hold: both are spent by this daily at the holder's choice,
+    after the number they dislike.
+
     `pick=EVERY_DIE` is "as many as you like", and `_rolled_pick`'s floor
     means a die already at its break-even is left alone rather than thrown
     away. #835."""
     c.reroll_faces(pick=EVERY_DIE)
+    c.reroll_faces(pick=EVERY_DIE, crit_dice=True)
 
 
 @power(

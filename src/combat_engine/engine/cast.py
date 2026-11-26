@@ -23923,6 +23923,7 @@ class Cast:
         ev: Any = None,
         pick: int = 1,
         below: int = 0,
+        crit_dice: bool = False,
     ) -> int:
         """Reroll faces of a damage roll **already made**, keeping the second
         result. Returns how many dice were rerolled.
@@ -23982,6 +23983,8 @@ class Cast:
         if ev is None:
             ev = self.trigger
         roll = getattr(ev, "roll", None)
+        if crit_dice:
+            return self._reroll_crit_faces(ev, pick, below)
         if roll is None or not roll.dice:
             return 0
         faces = _faces_of(roll.expr)
@@ -24001,6 +24004,57 @@ class Cast:
             roll.dice[i] = self.world.rng.die(faces)
         if price is not None:
             ev.amount += price(roll.total) - was
+        return len(chosen)
+
+    def _reroll_crit_faces(self, ev: Any, pick: int, below: int) -> int:
+        """The critical rider's faces, rerolled reactively. How many changed.
+
+        **Why this is a second branch rather than the same one.** The
+        `[W]` dice ride on `DamageRolled` as a live `Roll`; a critical's
+        rider does not, and cannot -- `_roll_damage_dice` returns `None`
+        on a crit because every face is maximised, and the rider's own
+        "+1d6 per plus" is rolled inside `equipment._crit_rider`'s
+        `Mod.roll()` closure and summed to an `int` before anything is
+        announced. So there is no `roll.dice` to walk here.
+
+        `components.CritFaces` is where that closure leaves them, and the
+        reason it is safe to leave them anywhere is in its own docstring:
+        the closure runs once per critical hit, not speculatively.
+
+        **Priced through `ev.recrit`, not by adding the difference.** The
+        rider's contribution is inside `resolve`'s `whole`, which is
+        halved with everything else -- so a change of `delta` moves the
+        amount by `delta` or by roughly half of it, and when the blow is
+        halved `ev.amount` is `got // 2` and not invertible. `recrit`
+        carries the pre-halving total and applies the halving itself,
+        which makes the arithmetic exact instead of approximately right.
+
+        Measured before building it: `extra = whole - reprice(roll.total)`
+        in `resolve.deal_damage` is where the rider's sum already sits,
+        and `_priced` halves it with the rest. `#835`.
+        """
+        from .components import CritFaces
+
+        kept = self.world.get(self.me, CritFaces)
+        if kept is None or not kept.faces or kept.size <= 1:
+            return 0
+        floor = (
+            kept.size // 2 + 1 if below <= 0 or below >= ANY_FACE else below
+        )
+        low = sorted(
+            (face, i) for i, face in enumerate(kept.faces) if face < floor
+        )
+        count = len(kept.faces) if pick >= EVERY_DIE else max(0, pick)
+        chosen = low[:count]
+        if not chosen:
+            return 0
+        was = sum(kept.faces)
+        for _face, i in chosen:
+            kept.faces[i] = self.world.rng.die(kept.size)
+        recrit = getattr(ev, "recrit", None)
+        delta = sum(kept.faces) - was
+        if recrit is not None and delta:
+            ev.amount = recrit(delta)
         return len(chosen)
 
     def _reroll_floor(self) -> int:

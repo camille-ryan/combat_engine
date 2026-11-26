@@ -2558,6 +2558,35 @@ class Budget:
 
 
 @dataclass
+class CritFaces:
+    """The faces a critical's rider rolled, kept for the blow being resolved.
+
+    *"Reroll the weapon dice and the critical dice"* -- `i1761p1`, a
+    **daily** spent after seeing a result it dislikes. The `[W]` half is
+    reachable because `resolve` hangs the live `Roll` on `DamageRolled`;
+    the rider's faces were not, because `equipment._crit_rider` sums them
+    inside a `Mod.roll()` closure and hands back an `int`.
+
+    **Recordable because that closure is not speculative.** Its own
+    docstring: *"`Mod.roll` is called once per read, which is once per
+    critical hit"* -- unlike `dsl.area_of`, which a renderer calls per
+    candidate origin, so a record there would hold whatever was drawn
+    last. One blow, one record.
+
+    **Not a field on the event**, which is the arrangement `#703` settled:
+    `Event.wire()` ships every declared field, so a field would move all
+    290 `DamageRolled` lines across the seven replay fixtures.
+
+    `size` is the die, so a reroll knows what to throw. Replaced on every
+    critical rather than accumulated: the only reader is a reaction to the
+    blow that just landed.
+    """
+
+    faces: list[int] = field(default_factory=list)
+    size: int = 0
+
+
+@dataclass
 class ActionPoints:
     """Action points, and the two limits that are not the same limit.
 

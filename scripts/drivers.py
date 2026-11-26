@@ -138302,6 +138302,158 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def a_crit_riders_faces_can_be_rerolled_after_the_fact(out: Result) -> None:
+    """`i1761p1` rerolls *"the weapon dice and the critical dice"*, and the
+    second half had nowhere to read from.
+
+    **The row's note was exact about the obstacle and one fact short of
+    the fix.** It said the rider's faces never reach `DamageRolled` --
+    true: `_roll_damage_dice` returns `None` on a critical because every
+    face is maximised, and the `+1d6 per plus` is summed inside
+    `equipment._crit_rider`'s `Mod.roll()` closure. What it did not say is
+    that the closure is **not speculative** -- its own docstring records
+    *"`Mod.roll` is called once per read, which is once per critical
+    hit"* -- so the faces can be kept for the blow, which is what
+    `components.CritFaces` does.
+
+    **And the arithmetic needed a second fact.** The rider's sum is inside
+    `resolve`'s `whole`, which `_priced` halves with everything else, so
+    adding the difference to `ev.amount` is wrong on a halved blow -- and
+    `ev.amount` is then `got // 2`, which is not invertible. `ev.recrit`
+    carries the pre-halving total and applies the halving itself. The
+    halved arm below is the one that would catch an implementation that
+    added the delta instead, and it is the arm I would have got wrong
+    without reading `deal_damage`.
+
+    A standing hold cannot serve this card -- `c.reroll_ones(crit_dice=)`
+    rerolls unconditionally and would never spend the daily -- which is
+    the distinction the marker turned on and the reason this is a
+    reactive door.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import EVERY_DIE, Cast
+    from combat_engine.engine.components import CritFaces, Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.types import DamageType
+
+    ROW = "i1761p1"
+    world, me, _ev = _board(ROW, 1)
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "the row carries no marker, where it was"
+             " `dropped=('c.reroll_faces(crit_dice=)',)`",
+             f"{REGISTRY[ROW].unfinished}")
+
+    c = Cast(world=world, me=me, ref=ROW)
+    victim = sorted(query.enemies(world, me))[0]
+
+    # **The record comes from the ENGINE, not from this rule.** An earlier
+    # draft staged `CritFaces` by hand and the plant that stops
+    # `equipment._crit_rider` recording anything stayed green. Driving the
+    # installed `crit_damage` mod's own closure is what ties the two
+    # halves together.
+    mods = world.get(me, Mods)
+    riders = [m for m in (mods.items if mods else []) if m.what == "crit_damage"]
+    out.that(bool(riders),
+             "premise: the board's weapon installs a crit rider at all",
+             f"{len(riders)}")
+    if not riders and riders is not None:
+        return
+    rolled = riders[0].roll() if riders[0].roll is not None else 0
+    recorded = world.get(me, CritFaces)
+    out.that(recorded is not None and bool(recorded.faces)
+             and sum(recorded.faces) <= rolled,
+             "and rolling it RECORDS the faces -- `equipment._crit_rider`"
+             " keeps them for the blow, which is the only reason a"
+             " reactive reroll has anything to read",
+             f"{recorded.faces if recorded else None} of {rolled}")
+    out.that(recorded is not None and recorded.size > 1,
+             "with the die size, so a reroll knows what to throw",
+             f"d{recorded.size if recorded else 0}")
+
+    def blow(faces: list[int], *, halve: bool) -> tuple[int, int, list[int]]:
+        """Stage a crit rider's faces and a landed blow, then reroll them."""
+        kept = world.get(me, CritFaces) or world.add(me, CritFaces())
+        kept.faces = list(faces)
+        kept.size = 6
+        base = 40
+        whole = base + sum(faces)
+        ev = DamageRolled(
+            source=me, target=victim,
+            amount=whole // 2 if halve else whole,
+            dtype=DamageType.FORCE, detail=ROW,
+        )
+        # `recrit` is what `resolve` attaches: the pre-halving total, with
+        # the halving applied here rather than guessed at by the caller.
+        ev.recrit = (
+            lambda delta, _w=whole, _h=halve: (
+                (_w + delta) // 2 if _h else _w + delta
+            )
+        )
+        before = ev.amount
+        moved = c.reroll_faces(ev=ev, pick=EVERY_DIE, crit_dice=True)
+        return moved, before, [ev.amount, *kept.faces]
+
+    # ---- the plain case ------------------------------------------------
+    moved, _was, after = blow([1, 1, 2], halve=False)
+    amount, *faces = after
+    out.that(moved == 3,
+             "every low face of the rider is rerolled -- 'as many of the"
+             " dice as you like', read off `CritFaces` because there is no"
+             " `roll.dice` on a critical to walk",
+             f"{moved} of 3")
+    out.that(all(f >= 1 for f in faces) and sum(faces) != 4,
+             "and the faces really changed",
+             f"{faces}")
+    out.that(amount == 40 + sum(faces),
+             "and the blow is repriced to the new sum -- not to the old"
+             " one plus a guess",
+             f"{amount} vs {40 + sum(faces)}")
+
+    # ---- the halved case, which is the one that catches a delta --------
+    moved2, _was2, after2 = blow([1, 1, 1], halve=True)
+    amount2, *faces2 = after2
+    out.that(moved2 == 3, "premise: the halved blow rerolled too",
+             f"{moved2}")
+    out.that(amount2 == (40 + sum(faces2)) // 2,
+             "a HALVED blow is repriced through the pre-halving total --"
+             " which is why `ev.recrit` exists: adding the difference to"
+             " `ev.amount` would be wrong by about half, and `ev.amount`"
+             " on a halved blow is `got // 2` and not invertible",
+             f"{amount2} vs {(40 + sum(faces2)) // 2}")
+
+    # ---- the ROW's own two calls ---------------------------------------
+    # The rule called `c.reroll_faces` directly, so the plant that drops
+    # the crit half from the row reddened nothing. Driving the body is
+    # what asserts the card rather than the verb.
+    kept = world.get(me, CritFaces) or world.add(me, CritFaces())
+    kept.faces, kept.size = [1, 1], 6
+    whole = 40 + sum(kept.faces)
+    fired = DamageRolled(source=me, target=victim, amount=whole,
+                         dtype=DamageType.FORCE, detail=ROW)
+    fired.recrit = lambda delta, _w=whole: _w + delta
+    row_cast = Cast(world=world, me=me, ref=ROW)
+    row_cast.trigger = fired
+    REGISTRY[ROW].body(row_cast)
+    out.that(sum(kept.faces) != 2,
+             "the ROW itself rerolls the crit faces -- both halves of"
+             " *'the weapon dice and the critical dice'* are its own two"
+             " calls, and this is the card rather than the verb",
+             f"{kept.faces}")
+    out.that(fired.amount == 40 + sum(kept.faces),
+             "and the blow it answers is repriced to match",
+             f"{fired.amount} vs {40 + sum(kept.faces)}")
+
+    # ---- a die already worth keeping is left alone ---------------------
+    moved3, before3, after3 = blow([6, 6, 6], halve=False)
+    out.that(moved3 == 0 and after3[0] == before3,
+             "and faces already at or above their break-even are left"
+             " alone, blow unchanged -- `_rolled_pick`'s floor, so 'as"
+             " many as you like' does not throw away a six",
+             f"{moved3} rerolled, {before3} -> {after3[0]}")
+
+
 def a_restricted_extra_action_pays_only_for_its_purpose(out: Result) -> None:
     """*"You gain an extra move action that you can use only to command the
     creature"* -- `i2897p1`, whose restriction had nowhere to live.
@@ -143985,6 +144137,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "crit_faces_reroll": (
+        a_crit_riders_faces_can_be_rerolled_after_the_fact,
+        "i1761p1 rerolls a critical rider's faces reactively and the"
+        " blow is repriced through the pre-halving total (#835)",
     ),
     "earmarked_action": (
         a_restricted_extra_action_pays_only_for_its_purpose,

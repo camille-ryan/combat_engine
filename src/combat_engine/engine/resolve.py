@@ -1974,6 +1974,28 @@ def deal_damage(
     # `DamageRolled` lines across the seven replay fixtures. `AttackResult`
     # rides on `Hit` the same way and for the same reason, and that is the
     # precedent a row answering a damage roll was told to copy. #703.
+    # **Re-pricing a rider that was NOT rolled from `roll.dice`.** A
+    # critical's rider is the case: `_roll_damage_dice` returns `None` on a
+    # crit -- every face is maximised, so no die was rolled -- which means
+    # the `reprice` closure below is never even attached, and the rider's
+    # own `+1d6 per plus` lives in `equipment._crit_rider`'s `Mod.roll()`
+    # and is already summed into `whole`.
+    #
+    # So a row rerolling those faces reactively cannot price the change
+    # from outside: `extra` is captured, and when the blow is halved
+    # `ev.amount` is `got // 2`, which is not invertible. This hands back
+    # the one quantity that makes it exact -- the amount with every
+    # modifier in it, before this function's halving -- and applies the
+    # halving itself.
+    #
+    # A plain attribute, never a field, for the reason the paragraph above
+    # gives about `Event.wire()`: a field here would move all 290
+    # `DamageRolled` lines across the seven fixtures. `i1761p1`, `#835`.
+    def _recrit(delta: int, _w: int = whole, _h: bool = halved) -> int:
+        got = _w + delta
+        return got // 2 if _h else got
+
+    announce.recrit = _recrit  # ty: ignore[unresolved-attribute]
     if roll is not None and reprice is not None:
         # `reprice` prices the dice as *the caller* did -- bonus,
         # enhancement, and `c.half_damage`'s own halving. Everything this
