@@ -34,7 +34,8 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.events import DamageRolled, PowerResolved
+from combat_engine.engine.query import deals_damage
 
 #: The five the card lists. Read here rather than inline so the two rows
 #: that want them cannot drift apart.
@@ -287,11 +288,36 @@ def f1123(c: Cast) -> None:
             label=f"{c.ref} use ended")
 
 
-@power("f1134", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.offer_before_aim()",))
+def _widenable(ctx: dict[str, Any]) -> bool:
+    """A wizard at-will or encounter attack power that deals damage.
+
+    The three conditions the card names for what it may be used on, read
+    off the aimed row rather than off keywords: *"a wizard at-will or
+    encounter attack power"* and *"you can't use this feat on a power that
+    doesn't roll dice for damage"*.
+
+    `query.deals_damage` is the reader for the last one and is the
+    established answer to "does this power normally deal damage" -- it
+    reads the body as well as the header, because 3,518 rows declare
+    `damage=None` and deal damage through `c.damage`. It is marginally
+    wider than the printed *"roll dice"*: a row dealing a flat amount
+    passes it. That case prices at zero anyway, since the penalty is per
+    die and such a blow announces none.
+    """
+    row = get(str(ctx.get("power") or ""))
+    return (
+        row is not None
+        and row.cls == "wizard"
+        and row.attack is not None
+        and row.usage in (AT_WILL, ENCOUNTER)
+        and deals_damage(row.ref)
+    )
+
+
+@power("f1134", level=1, cls="", usage=AT_WILL, action=ActionType.FREE,
+       reach=PERSONAL, target=SELF)
 def f1134(c: Cast) -> None:
-    """Re-aimed three times, and the third time retired a claim I measured
-    to be false.
+    """A wider blast, paid for per die. Re-aimed three times before this.
 
     The first marker named `c.widen_area()`, which has never existed, while
     `c.widen_areas` does and is exactly the payout -- so the instrument agreed
@@ -335,10 +361,84 @@ def f1134(c: Cast) -> None:
     standing trait would be worse than that: it would widen every power
     all fight and remove the choice the card is made of.
 
-    #1436 holds the design and the three doors that are not it. Its census
-    is one row -- this one -- and deliberately a floor: nothing has swept
-    for other cards phrased "before using <a class of powers>, you can
-    choose to", so the facility wants sizing after that sweep."""
+    #1436 holds the design and the three doors that are not it.
+
+    **The sweep that note asked for found a fourth door, and it is a row
+    rather than a facility.** `f714` prints the same shape -- *"Before you
+    use an area or close arcane power, you can use a free action to..."* --
+    and carries no marker, because it is declared `action=FREE,
+    usage=AT_WILL` and the character simply uses it before the power. The
+    "before" is the player's ordering, not a hook into aiming. So "nothing
+    a trait can arm runs there" was asking the wrong question: nothing
+    needs to arm, because the row *is* the free action.
+
+    Swept over every spec table before writing this: one other card phrased
+    "before using ... you can choose" (this one), and `f714` on the wider
+    "before you use a <class> power". Two rows, one shape, and `f714` had
+    already solved it.
+
+    **What makes it faithful rather than a payout with no price is that
+    both halves read ONE predicate.** `_widenable` above answers the
+    card's three conditions, and it gates the widening *and* the penalty:
+
+    * `c.bonus("blast_size", 1, when=_widenable, once=True)` is the
+      payout. `dsl._stretched` reads `"blast_size"` with a context
+      carrying `{"power": ref}`, which is what lets the gate name the
+      aimed row at all -- `f287`, `f601` and `p5275` take the
+      same route, measured rather than recalled -- the first draft of this
+      sentence named a ref that does not exist and `refs.py` caught it.
+    * a `DamageRolled` watch is the price. `#703` hangs the live `Roll` on
+      that event, so `ev.roll.dice` is the faces and
+      `resolve.deal_damage` re-reads `rolled.amount` after the emit --
+      measured at `resolve.py`'s `amount = max(0, rolled.amount)`. So
+      `ev.amount -= 2 * len(dice)` is the printed *"-2 penalty to each
+      die"*, and a blow rolling no dice is charged nothing.
+
+    Had either half been written without the other, the card would have
+    been strictly better or strictly worse than print, which is what the
+    old note correctly refused to do.
+
+    **The price follows the power, not the turn.** The first qualifying
+    damage roll fixes which row is being paid for, and later rolls of that
+    same row are priced too -- an area power announcing one roll per target
+    must be charged on each, which `once=True` on the watch would have
+    underpriced. A closure list holds that, which is per-use state on this
+    effect rather than a module-level store keyed on the world.
+
+    `usage=AT_WILL` and `action=FREE`, both from `f714`'s reading: the card
+    prints no per-encounter limit, so `ENCOUNTER` -- which this row
+    carried -- was a silent narrowing."""
+    widened = c.bonus("blast_size", 1, on=c.me, until=When.EOT,
+                      when=_widenable)
+
+    paid: list[str] = []
+
+    def price(ev: DamageRolled) -> None:
+        if getattr(ev, "source", None) != c.me:
+            return
+        row = get(str(getattr(ev, "detail", "") or ""))
+        if row is None or not _widenable({"power": row.ref}):
+            return
+        if paid and paid[0] != row.ref:
+            return
+        if not paid:
+            paid.append(row.ref)
+            # **The choice is spent here, not by a duration.** `c.bonus`
+            # refuses `once=` on this key and says why: `"blast_size"` has
+            # no spend moment of its own, so a `once=` hold would be eaten
+            # by the next *attack roll* instead of by the aiming it paid
+            # for. Ending it on the first qualifying damage roll is the
+            # honest equivalent -- the area is already settled by then, so
+            # the power that was widened keeps its wider area and a second
+            # power this turn gets nothing.
+            if widened is not None:
+                c.end_effect(widened, why=c.ref)
+        rolled = getattr(ev, "roll", None)
+        dice = list(getattr(rolled, "dice", ()) or ())
+        if dice:
+            ev.amount -= 2 * len(dice)
+
+    c.watch(DamageRolled, price, until=When.EOT)
 
 
 @power("f1128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

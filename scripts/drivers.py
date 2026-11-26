@@ -138278,6 +138278,160 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def a_wider_blast_is_paid_for_per_die(out: Result) -> None:
+    """*"Before using a wizard at-will or encounter attack power, you can
+    choose to take a -2 penalty to each die of damage rolled with the power
+    to increase the size of its blast or its burst by 1."* -- `f1134`.
+
+    **The row had been re-aimed three times and its note concluded the
+    moment was missing**: *"nothing a trait can arm runs there"*, since
+    `PowerUsed` already carries targets, `Power.effect_before` is a header
+    field on the power being used, and `c.pre_empt` needs an
+    `instead_of`.
+
+    A sweep over every spec table found the answer was a **row**, not a
+    facility. `f714` prints the same shape -- *"Before you use an area or
+    close arcane power, you can use a free action to..."* -- and carries no
+    marker, because it is `action=FREE, usage=AT_WILL` and the character
+    uses it before the power. The "before" is the player's ordering. So
+    nothing needs to arm: the row *is* the free action.
+
+    **What this rule is really guarding is that the payout and the price
+    cannot come apart.** Writing the wider blast alone is a strictly better
+    card; writing the penalty alone is a strictly worse one. Both read one
+    predicate -- `_widenable`, the card's own three conditions -- so a
+    power that does not qualify gets neither, which is the pair of negative
+    arms below.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.rng import Roll
+    from combat_engine.engine.types import ActionType, DamageType, Usage
+
+    ROW = "f1134"
+    world, me, _ev = _board(ROW, 1)
+
+    declared = REGISTRY[ROW]
+    out.that(not declared.unfinished,
+             "the row carries no marker, where it was"
+             " `todo=('c.offer_before_aim()',)` -- a facility that turned"
+             " out not to be needed",
+             f"{declared.unfinished}")
+    out.that(declared.action is ActionType.FREE
+             and declared.usage is Usage.AT_WILL,
+             "and it is a FREE at-will, which is `f714`'s shape and the"
+             " whole of how the 'before using' moment is reached. It"
+             " carried `ENCOUNTER`, which the card does not print",
+             f"{declared.action}/{declared.usage}")
+
+    # A power the card allows, and one it does not, chosen off the registry
+    # rather than named -- so this rule does not go stale when either row
+    # changes.
+    def allowed(ref: str) -> bool:
+        row = get(ref)
+        return (row is not None and row.cls == "wizard"
+                and row.attack is not None
+                and row.usage in (Usage.AT_WILL, Usage.ENCOUNTER)
+                and query.deals_damage(row.ref))
+
+    good = next((r for r in sorted(REGISTRY) if allowed(r)), "")
+    bad = next((r for r in sorted(REGISTRY)
+                if (row := get(r)) is not None and row.cls == "cleric"
+                and row.attack is not None), "")
+    out.that(bool(good) and bool(bad),
+             "premise: the corpus holds a wizard attack power that deals"
+             " damage and a non-wizard one to contrast it with",
+             f"{good} vs {bad}")
+    if not good or not bad:
+        return
+
+    c = Cast(world=world, me=me, ref=ROW)
+    REGISTRY[ROW].body(c)
+
+    mods = world.get(me, Mods)
+    out.that(mods is not None, "premise: the row laid a modifier", f"{mods}")
+    if mods is None:
+        return
+    out.that(mods.total("blast_size", {"power": good}) == 1,
+             "a qualifying wizard power's blast or burst is one square"
+             " wider -- the payout, read the way `dsl._stretched` reads it,"
+             " with the aimed row in the context",
+             f"{mods.total('blast_size', {'power': good})}")
+    out.that(mods.total("blast_size", {"power": bad}) == 0,
+             "and a power the card does not cover gets NOTHING -- the"
+             " negative control, and without it the row would widen every"
+             " area power the character owns",
+             f"{mods.total('blast_size', {'power': bad})}")
+
+    # ---- the price, on the same predicate ------------------------------
+    def blow(ref: str, faces: list[int]) -> int:
+        ev = DamageRolled(
+            source=me, target=sorted(query.enemies(world, me))[0],
+            amount=sum(faces), dtype=DamageType.FORCE, detail=ref,
+        )
+        ev.roll = Roll(expr=f"{len(faces)}d6", dice=list(faces), bonus=0)
+        world.bus.emit(ev)
+        return ev.amount
+
+    # **Measured once into a variable.** Calling `blow` again inside the
+    # detail string would emit a SECOND `DamageRolled` and report a
+    # different observation than the one asserted -- the f-string
+    # re-reading a value and spending it.
+    charged = blow(good, [4, 3, 5])
+    out.that(charged == 12 - 6,
+             "a qualifying power's damage drops by 2 for EACH die -- three"
+             " dice, six points, which is the printed price and is why the"
+             " faces are read rather than the total",
+             f"{charged} from 12")
+
+    world2, me2, _e2 = _board(ROW, 2)
+    c2 = Cast(world=world2, me=me2, ref=ROW)
+    REGISTRY[ROW].body(c2)
+
+    def blow2(ref: str, faces: list[int]) -> int:
+        ev = DamageRolled(
+            source=me2, target=sorted(query.enemies(world2, me2))[0],
+            amount=sum(faces), dtype=DamageType.FORCE, detail=ref,
+        )
+        ev.roll = Roll(expr=f"{len(faces)}d6", dice=list(faces), bonus=0)
+        world2.bus.emit(ev)
+        return ev.amount
+
+    spared = blow2(bad, [4, 3, 5])
+    out.that(spared == 12,
+             "while a power the card does not cover is charged nothing --"
+             " the other half of the pair, so the penalty cannot be laid"
+             " without the payout either",
+             f"{spared} from 12")
+
+    # ---- the choice is spent by the power it paid for -------------------
+    world3, me3, _e3 = _board(ROW, 3)
+    c3 = Cast(world=world3, me=me3, ref=ROW)
+    REGISTRY[ROW].body(c3)
+    mods3 = world3.get(me3, Mods)
+    out.that(mods3 is not None
+             and mods3.total("blast_size", {"power": good}) == 1,
+             "premise: the widening is up",
+             "up")
+    ev3 = DamageRolled(
+        source=me3, target=sorted(query.enemies(world3, me3))[0],
+        amount=6, dtype=DamageType.FORCE, detail=good,
+    )
+    ev3.roll = Roll(expr="1d6", dice=[6], bonus=0)
+    world3.bus.emit(ev3)
+    out.that(mods3 is not None
+             and mods3.total("blast_size", {"power": good}) == 0,
+             "and it is SPENT once the power it paid for has rolled its"
+             " damage -- `c.bonus` refuses `once=` on this key because"
+             " `blast_size` has no spend moment of its own, so the row ends"
+             " the hold itself rather than letting the next attack roll eat"
+             " it",
+             f"{mods3.total('blast_size', {'power': good}) if mods3 else '?'}")
+
+
 def a_cloud_that_moves_blinds_its_new_footprint(out: Result) -> None:
     """`f1305`'s `p2473.live_area()`, which was a **bug** in `p2473` as much
     as a block on the feat.
@@ -143077,6 +143231,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "wider_blast_priced": (
+        a_wider_blast_is_paid_for_per_die,
+        "f1134's wider blast and its per-die price read ONE predicate, so"
+        " neither can be had without the other (#1436)",
     ),
     "cloud_follows": (
         a_cloud_that_moves_blinds_its_new_footprint,
