@@ -1,8 +1,8 @@
 {
-  "sha": "151f6062d07a3302e2e0072f82138bf213d6315c",
-  "refs": 22332,
-  "fired": 21157,
-  "silent": 458,
+  "sha": "a4130265af3d60aeb59aca7fa3103809df876c9c",
+  "refs": 22333,
+  "fired": 21159,
+  "silent": 457,
   "never": 506,
   "never_refs": [
     "cf:barbarian-f2c0",
@@ -816,7 +816,6 @@
     "cf:warlock-hexblade-f6s3",
     "cf:warlock-hexblade-f6s4",
     "cf:warlock-hexblade-f6s5",
-    "cf:warlord-marshal-f3",
     "cf:warlord-marshal-f5",
     "cf:wizard-arcanist-f0c0",
     "cf:wizard-arcanist-f0s0",
@@ -1307,7 +1306,6 @@
     "cf:wizard-mage-f28",
     "cf:wizard-mage-f29",
     "f1071",
-    "f1134",
     "f1843",
     "f1962",
     "f2580",
