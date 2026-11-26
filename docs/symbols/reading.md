@@ -300,6 +300,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Is this creature in one of the named forms?
 - `query.lingers(world: 'World', ref: 'str', *, by: 'int | None' = None) -> 'bool'`
   - Is anything this power laid still in play?
+- `query.mimicking(world: 'World', eid: 'int', who: 'int') -> 'bool'`
+  - Is this creature wearing **that** creature's appearance?
 - `query.my_hits_this_turn(world: 'World', eid: 'int') -> 'list[Any]'`
   - Every blow this creature has landed since its own turn began.
 - `query.my_misses_this_turn(world: 'World', eid: 'int') -> 'list[Any]'`

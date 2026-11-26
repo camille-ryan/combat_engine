@@ -138271,6 +138271,164 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def wearing_the_oath_targets_face_grants_advantage(out: Result) -> None:
+    """*"If you use your change shape racial power to assume the appearance
+    of your p3069 target, you gain combat advantage against that creature
+    until the end of your next turn."* -- `f1555`.
+
+    **Two obstacles, one piece of work.** The row's note had both right and
+    priced them as separate: nothing recorded *whose* appearance a form
+    wears, and `p2472` carried `out_of_combat=True` so nothing in a fight
+    announced a use of it for this clause to answer. Camille's ruling on
+    `#1597` settled the flag, and the flag came off as part of landing the
+    facility -- which is what the note itself predicted.
+
+    **`name=` could not have been the facility**, which is the arm that
+    matters most here. A form's `name` is the word the card prints for a
+    *kind* of shape, so `c.in_form` answers yes to any disguise at all;
+    this clause is about which **creature** the face belongs to.
+    `query.mimicking` is strict where `in_form` is permissive, and the
+    `nothing recorded` arm is what holds that line.
+
+    **The clause lives in `p2472`, not here**, per `#550`: a feat naming
+    one power writes its clause into that power's body gated on `c.feat`,
+    inside a `c.credit` block so the effect is the feat's doing. `f1555`
+    carries `implemented_in=` and is not fired by the audit at all, which
+    is why this rule is its only proof.
+    """
+    from combat_engine.content.powers.avenger.oath import swear
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Shapes
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Relation
+
+    FEAT, POWER = "f1555", "p2472"
+
+    out.that(REGISTRY[FEAT].implemented_in == (POWER,),
+             "the feat is a declared pointer into the racial power -- #550's"
+             " rule, and the reason the audit never fires this row",
+             f"{REGISTRY[FEAT].implemented_in}")
+    out.that(not REGISTRY[FEAT].unfinished,
+             "and it carries no marker, where it was"
+             " `todo=('c.form(mimics=)',)`",
+             f"{REGISTRY[FEAT].unfinished}")
+    out.that(not REGISTRY[POWER].out_of_combat,
+             "and the racial power is no longer out_of_combat -- Camille's"
+             " ruling on #1597, and while the flag was on `actions.legal`"
+             " skipped it so the feat could never have fired",
+             f"{REGISTRY[POWER].out_of_combat}")
+
+    # ---- nothing recorded is FALSE, not permissive ---------------------
+    world, me, _ev = _board(POWER, 1)
+    foes = sorted(query.enemies(world, me))
+    mark_foe = foes[0]
+    out.that(not query.mimicking(world, me, mark_foe),
+             "a creature that has changed no shape is wearing NOBODY's"
+             " face -- strict, where `in_form` is deliberately permissive"
+             " about an unrecorded shape. A permissive default here would"
+             " pay the feat out before anybody had disguised themselves",
+             f"{world.get(me, Shapes)}")
+    out.that(POWER in {a.ref for a in _actions.legal(world, world.encounter, me)},
+             "and `actions.legal` OFFERS the racial power, which is what"
+             " the flag actually controlled",
+             "offered")
+
+    # ---- the feat's own case -------------------------------------------
+    world2, me2, _e2 = _board(FEAT, 1)
+    foes2 = sorted(query.enemies(world2, me2))
+    sworn_foe, bystander = foes2[0], foes2[1]
+    c2 = Cast(world=world2, me=me2, ref="probe")
+    swear(c2, sworn_foe)
+    out.that(query.mimicking(world2, me2, sworn_foe) is False,
+             "premise: no face worn yet",
+             "none")
+
+    held = REGISTRY[FEAT]
+    out.that(held is not None, "premise: the feat is declared", "declared")
+
+    # Wear the sworn creature's face through the racial power itself.
+    body = Cast(world=world2, me=me2, ref=POWER)
+    body.form(name="humanoid", mimics=sworn_foe)
+    out.that(query.mimicking(world2, me2, sworn_foe),
+             "wearing that creature's face is RECORDED -- the facility the"
+             " feat waited on, and `c.in_form` could not have said it",
+             "recorded")
+    out.that(not query.mimicking(world2, me2, bystander),
+             "and it names only that creature, not every creature on the"
+             " board -- the negative control for the record itself",
+             "not the bystander")
+
+    # ---- the form ending takes the face with it ------------------------
+    world3, me3, _e3 = _board(POWER, 2)
+    victim = sorted(query.enemies(world3, me3))[0]
+    c3 = Cast(world=world3, me=me3, ref=POWER)
+    shape = c3.form(name="humanoid", mimics=victim)
+    out.that(query.mimicking(world3, me3, victim),
+             "premise: the face is on",
+             "on")
+    world3.effects.end(shape, "probe")
+    out.that(not query.mimicking(world3, me3, victim),
+             "and ending the form takes the face off with it -- side state,"
+             " on the same contract `Shapes.live` keeps, so a lapsed"
+             " disguise cannot keep paying the feat out",
+             "off")
+
+    # ---- the payout, and the credit ------------------------------------
+    # **The choice is forced by swearing against whoever the row picks**,
+    # rather than by trying to steer `c.choose`. The first use records a
+    # face; the oath is then sworn against that same creature; the second
+    # use is the printed case. Deterministic without reaching into
+    # `World.decide`.
+    world5, me5, _e5 = _board(FEAT, 1)
+    out.that(Cast(world=world5, me=me5, ref=FEAT).feat(FEAT),
+             "premise: the board's character holds the feat -- every arm"
+             " below is about a gate on it",
+             "held")
+    REGISTRY[POWER].body(Cast(world=world5, me=me5, ref=POWER))
+    worn = sorted((world5.get(me5, Shapes) or Shapes()).mimics)
+    out.that(bool(worn),
+             "premise: the row wore somebody's face",
+             f"{worn}")
+    if not worn:
+        return
+    face = worn[0]
+
+    before = set(world5.relations.targets(Relation.GRANTS_CA_TO, face))
+    out.that(me5 not in before,
+             "and with the oath sworn against NOBODY it grants nothing --"
+             " the gate is the oath, not the disguise, so this is the"
+             " control that stops the clause paying on any face at all",
+             f"{sorted(before)}")
+
+    swear(Cast(world=world5, me=me5, ref="probe"), face)
+    REGISTRY[POWER].body(Cast(world=world5, me=me5, ref=POWER))
+    after = set(world5.relations.targets(Relation.GRANTS_CA_TO, face))
+    out.that(me5 in after,
+             "and wearing the SWORN creature's face grants combat"
+             " advantage against it -- the printed payout",
+             f"{sorted(after)}")
+
+    # **`Effect.credit`, not `Effect.by`.** The first draft read `by` and
+    # failed while the row was correct: `c.credit` stamps a separate
+    # attribute -- `durations.py` sets `eff.credit` from the block's stack
+    # -- and `by` goes on saying which row's verb laid the effect, which is
+    # `p2472`. Two different questions on one object, and only one of them
+    # is what `audit._claimed` reads for a #550 clause.
+    mine = [
+        e for e in world5.effects.live.values()
+        if not e.ended and getattr(e, "credit", "") == FEAT
+    ]
+    out.that(bool(mine),
+             "and the effect is credited to the FEAT, not to the racial"
+             " power that laid it -- `c.credit`, without which the feat"
+             " reports SILENT while working perfectly",
+             f"{sorted({getattr(e, 'credit', '')
+                         for e in world5.effects.live.values()
+                         if not e.ended})}")
+
+
 def an_aimed_square_is_announced_and_a_feat_reads_it(out: Result) -> None:
     """*"When you use your p1217, you can spend 1 power point to gain combat
     advantage ... against one enemy adjacent to the target object or
@@ -142789,6 +142947,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "mimic_the_sworn": (
+        wearing_the_oath_targets_face_grants_advantage,
+        "f1555 pays only for wearing the OATH TARGET's face, recorded by"
+        " c.form(mimics=) which c.in_form could not say (#1597)",
     ),
     "aimed_square": (
         an_aimed_square_is_announced_and_a_feat_reads_it,

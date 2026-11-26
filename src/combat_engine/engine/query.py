@@ -2582,6 +2582,31 @@ def can_react(world: World, eid: int, *, ignoring: Condition | None = None) -> b
     )
 
 
+def mimicking(world: World, eid: int, who: int) -> bool:
+    """Is this creature wearing **that** creature's appearance?
+
+    `in_form` beside this answers which *kind* of shape a creature is in --
+    `humanoid`, `beast`, `hybrid` -- and would answer yes to any disguise at
+    all. `f1555` needs the narrower question: *"if you use your change shape
+    racial power to assume the appearance of your p3069 target, you gain
+    combat advantage against that creature"*.
+
+    **Strict where `in_form` is permissive**, and the asymmetry is the point.
+    `in_form` answers True when nothing has been recorded, because a creature
+    that has not changed shape is in whatever shape its stat block found it
+    in and guessing would refuse half a shapechanger's card. There is no such
+    default here: nobody wears a particular creature's face by accident, so an
+    unrecorded answer is False and a row gated on this pays nothing until a
+    form actually named somebody.
+
+    Reads `Shapes.mimics`, which `Cast.form(mimics=)` maintains.
+    """
+    from .components import Shapes
+
+    worn = world.get(eid, Shapes)
+    return worn is not None and who in worn.mimics
+
+
 def in_form(world: World, eid: int, *names: str) -> bool:
     """Is this creature in one of the named forms?
 

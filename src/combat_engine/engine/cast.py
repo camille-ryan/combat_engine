@@ -12551,6 +12551,7 @@ class Cast:
         revert: ActionType | None = ActionType.MINOR,
         label: str = "",
         name: str = "",
+        mimics: int | None = None,
     ) -> Effect:
         """Assume a shape: some conditions, some ways of moving, and a way out.
 
@@ -12568,6 +12569,14 @@ class Cast:
         Several at once is the ordinary case, not an edge: a card printing
         "human or hybrid form" on one row and "rat or hybrid form" on another
         means hybrid is both, so the names go in a set.
+
+        **`mimics` names WHOSE appearance it is, which `name` cannot say.**
+        `f1555` pays *"if you use your change shape racial power to assume
+        the appearance of your p3069 target"*, and `name` is the word the
+        card prints for a *kind* of shape -- it would answer yes to any
+        disguise at all. `query.mimicking` is the reader. Kept beside
+        `name` rather than made a second verb because it is the same act:
+        one call takes one form, and this says who that form looks like.
         """
         effect = self.world.effects.apply(
             self.me,
@@ -12596,6 +12605,19 @@ class Cast:
                 shapes.live.add(word)
                 effect.on_suspend.append(lambda: shapes.live.discard(word))
                 effect.on_resume.append(lambda: shapes.live.add(word))
+        if mimics is not None:
+            from .components import Shapes as _Shapes
+
+            worn = self.world.get(self.me, _Shapes) or self.world.add(
+                self.me, _Shapes()
+            )
+            # Side state, on the same contract as `live` above: it lifts on
+            # a suspension and comes back, and it goes when the form does.
+            if mimics not in worn.mimics:
+                worn.mimics.add(mimics)
+                effect.on_suspend.append(lambda: worn.mimics.discard(mimics))
+                effect.on_resume.append(lambda: worn.mimics.add(mimics))
+                effect.on_end.append(lambda: worn.mimics.discard(mimics))
         for name, speed in (modes or {}).items():
             granted = self.mode(name, speed, until=until)
             if granted is not None:

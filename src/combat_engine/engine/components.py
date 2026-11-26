@@ -716,6 +716,23 @@ class Shapes:
 
     live: set[str] = field(default_factory=set)
 
+    #: **Whose appearance is being worn**, where `live` says only what *kind*
+    #: of shape it is. `f1555` pays *"if you use your change shape racial
+    #: power to assume the appearance of your p3069 target, you gain combat
+    #: advantage against that creature"* -- so the question is not which form
+    #: this is, which `live` answers and which would answer yes to any
+    #: disguise at all, but **which creature** it imitates.
+    #:
+    #: A set for the same reason `live` is one, and the reasoning carries
+    #: over rather than being guessed at: a creature may hold more than one
+    #: form effect at once, so more than one may name somebody. The reader
+    #: `query.mimicking` asks about one creature, which is what the cards
+    #: ask.
+    #:
+    #: Side state, maintained by `c.form` and lifted and restored with a
+    #: suspension exactly as `live` is.
+    mimics: set[int] = field(default_factory=set)
+
 
 @dataclass
 class Undying:

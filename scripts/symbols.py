@@ -1673,6 +1673,7 @@ READERS: dict[str, list[str]] = {
     "what has already happened": [
         "attacked_since", "bloodied", "damaged_since", "dropped_since",
         "hit_me_this_turn", "in_form", "granted_amount", "lingers",
+        "mimicking",
         "my_hits_this_turn", "my_misses_this_turn", "shaped",
         "area_struck_by",
         "attacked_during_own_turn",

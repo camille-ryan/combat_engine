@@ -575,18 +575,28 @@ def f1523(c: Cast) -> None:
 
 
 @power("f1555", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.form(mimics=)",))
+       reach=PERSONAL, target=SELF, implemented_in=("p2472",))
 def f1555(c: Cast) -> None:
     """Combat advantage for wearing the face of the creature you are hunting.
 
     **Not a question about which shape it is in.** `c.in_form` answers that
     and would answer yes to any shape at all; what this needs is whether the
-    shape taken is *that particular creature's*, which `c.form` cannot be
-    told and nothing records.
+    shape taken is *that particular creature's*. `c.form(mimics=)` records
+    it and `query.mimicking` reads it -- strict where `in_form` is
+    permissive, because nobody wears a particular creature's face by
+    accident.
 
-    The racial power is `p2472` and it is declared, so the naming half is
-    closed. It is declared `out_of_combat=True`, which is why this row has
-    nothing to read even once the appearance can be aimed.
+    **Written into `p2472`**, which is `#550`'s rule for a feat naming one
+    power: the clause lives in that power's body gated on `c.feat("f1555")`
+    and inside a `c.credit("f1555")` block, so the effect is this feat's
+    doing rather than the racial power's. Without the block the label would
+    say `p2472` and this row would report SILENT while working.
+
+    **Both halves of the old note were right about the obstacle and wrong
+    about its size.** It said `p2472` is `out_of_combat=True`, "which is why
+    this row has nothing to read even once the appearance can be aimed" --
+    and the flag came off as part of landing the facility, on Camille's
+    ruling on `#1597`. The two were one piece of work, not two.
     """
 
 

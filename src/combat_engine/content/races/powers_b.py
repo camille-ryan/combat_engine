@@ -33,6 +33,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from combat_engine.content.powers.augment import lent
+from combat_engine.content.powers.avenger.oath import oath_target
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -101,6 +102,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.query import (
     bloodied,
+    creatures,
     enemies,
     my_hits_this_turn,
     trait_gated_worn,
@@ -600,10 +602,69 @@ def p16388(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    out_of_combat=True,
+    dropped=("story.skill_use()",),
 )
 def p2472(c: Cast) -> None:
-    """Appearance and a Bluff check. The statistics are explicitly unchanged."""
+    """Appearance, and WHOSE appearance -- which is what `f1555` reads.
+
+    **`out_of_combat=True` is off.** Camille ruled on `#1597` that these
+    rows should lose the flag, and `f1555` is the dependent that made it
+    matter: *"if you use your change shape racial power to assume the
+    appearance of your p3069 target, you gain combat advantage against
+    that creature until the end of your next turn"*. While this row was
+    flagged, `actions.legal` skipped it outright, so nothing in a fight
+    announced a use of it and `f1555` had nothing to read -- which its own
+    note said in as many words.
+
+    **`c.form(mimics=)` is the facility, and `name=` could not have been
+    it.** A form's `name` is the word the card prints for a *kind* of
+    shape, so `c.in_form` would answer yes to any disguise at all; this
+    card's clause is about **which creature** the face belongs to.
+    `query.mimicking` is the reader, and it is strict where `in_form` is
+    permissive -- nobody wears a particular creature's face by accident,
+    so an unrecorded answer is False rather than True.
+
+    **The appearance is offered as a creature on the board**, which is
+    narrower than the printed *"any Medium humanoid"* and is the only part
+    of it a board can hold. A generic disguise changes nothing a fight
+    measures -- the card says outright that the statistics do not change --
+    so the choice that carries meaning is whose face it is, and declining
+    leaves the form generic rather than refusing the row.
+
+    **`f1555`'s clause is written HERE**, which is `#550`'s rule: a feat
+    naming one power writes its clause into that power, gated on
+    `c.feat`, so the feat row stays a declared pointer and carries
+    `implemented_in=`. `c.credit` is what makes the laid effect the feat's
+    doing rather than this row's -- without it the label says `p2472` and
+    `f1555` reports SILENT while working perfectly.
+
+    `until=When.ENCOUNTER` with the default `revert=MINOR` is as close as
+    this engine comes to *"the new form lasts until you change form
+    again"*: there is no until-you-replace-it rung, and a minor action out
+    is what the verb already charges.
+
+    Dropped: the opposed check. *"Any creature that attempts to see
+    through your ruse makes an Insight check opposed by your Bluff
+    check"* has no moment on a board -- nothing attempts to see through a
+    ruse -- and the +5 cannot be laid as a standing bonus without being
+    either a dead gate (no "ruse" key exists in a check context) or
+    strictly stronger than print (an unconditional +5 to every Bluff
+    check). `story.skill_use()` is the symbol three other rows carry for
+    exactly this.
+    """
+    seen = sorted(
+        w for w in creatures(c.world) if w != c.me and c.can_see(w)
+    )
+    who = c.choose(seen, f"{c.ref}: whose appearance to wear") if seen else None
+    c.form(name="humanoid", until=When.ENCOUNTER, mimics=who)
+    if who is None:
+        return
+    # *"...to assume the appearance of your p3069 target"* -- `f1555`, and
+    # the gate is the oath rather than the shape, so a disguise worn as
+    # somebody else pays nothing.
+    if c.feat("f1555") and who == oath_target(c):
+        with c.credit("f1555"):
+            c.grants_advantage(on=who, until=When.EONT)
 
 
 # -- r16 --------------------------------------------------------------------
