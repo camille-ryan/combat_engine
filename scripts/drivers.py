@@ -83324,16 +83324,51 @@ def no_sound_crosses_a_silenced_zone(out: Result) -> None:
     out.that(len(pair) >= 2,
              "premise: two creatures stand outside the zone",
              f"{pair[:2]}")
+    if len(pair) < 2:
+        return
+    # **Stood side by side on purpose, and that is new.** This arm used to
+    # take whatever two creatures the board happened to leave outside the
+    # zone, which was sound while the zone silenced only its own squares.
+    # Now that *"or through it"* is written, a pair the zone stands
+    # **between** is correctly deaf -- so the old arm would have reddened
+    # or passed depending on the draw, which is the flakiness
+    # `scripts/CLAUDE.md` is about. Placed adjacent and far from the zone,
+    # the question it asks is the one it always meant: the zone silences a
+    # region, not the board.
+    corner = (world.grid.width - 2, world.grid.height - 2)
+    beside = (world.grid.width - 3, world.grid.height - 2)
+    for who, seat in ((pair[0], corner), (pair[1], beside)):
+        spot = must(world.get(who, Position), "the creature has a position")
+        world.grid.lift(who)
+        spot.square = seat
+        world.grid.place(who, frozenset({seat}))
+    out.that(not (squares(world, pair[0]) & inside)
+             and not (squares(world, pair[1]) & inside),
+             "staged outside the zone and next to each other, so the zone"
+             " cannot be standing between them",
+             f"{corner} / {beside}")
     out.that(can_hear(world, pair[0], pair[1]),
              "and they hear each other perfectly well -- the zone"
              " silences its own squares and not the board, which is the"
              " arm that makes every line above about the region",
              "heard")
 
-    out.that(REGISTRY[ROW].unfinished == ("query.can_hear(through a zone)",),
-             "and the row's marker names the one clause that cannot be"
-             " written: *'or through it'* is a line, and `can_hear` is"
-             " deliberately not a line-of-effect test",
+    # **This arm used to pin the marker, and the marker is gone.** It read
+    # *"the row's marker names the one clause that cannot be written:
+    # 'or through it' is a line, and `can_hear` is deliberately not a
+    # line-of-effect test"* -- and that argument was one step wrong. "Sound
+    # goes round corners" is a claim about **walls**; the card prints a
+    # sound blocker, so the zone is an exception to that default rather
+    # than a contradiction of it. `drivers.silencing_zone` proves the
+    # through-it clause, including the grazing pair that tells a permissive
+    # test from a strict one.
+    #
+    # Kept as an arm rather than deleted, because "this row is finished" is
+    # the thing a later change could quietly undo.
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries NO marker -- all three printed clauses"
+             " are written, where this arm used to assert that the third"
+             " one could not be",
              f"{REGISTRY[ROW].unfinished}")
 
 
