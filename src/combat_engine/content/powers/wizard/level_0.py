@@ -48,6 +48,8 @@ from combat_engine.engine import (
     World,
     power,
 )
+from combat_engine.engine.grid import spread
+from combat_engine.engine.query import squares
 
 ARCANE = [Keyword.ARCANE]
 
@@ -144,10 +146,46 @@ BLADESPELL_MISSED = Trigger(
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[*ARCANE, Keyword.ILLUSION],
-    out_of_combat=True,
 )
 def p1217(c: Cast) -> None:
-    c.note("p1217: a sound, from a whisper to a shout, from a chosen square")
+    """A sound, from a whisper to a shout, from a square you choose.
+
+    **`out_of_combat=True` is off, and landing the facility is what took
+    it off.** Camille ruled on `#1597` that these rows should lose the
+    flag; `f3292`'s note had already worked out that for this one the flag
+    was a *consequence* rather than a second gap --
+
+    > *"whoever lands `Target.square` has to re-declare `p1217` with the
+    > square it aims at, which is what takes the flag off; the flag is a
+    > consequence of there being nothing to aim at, not a second gap."*
+
+    -- and that is exactly what happened, except that `Target.square` was
+    the wrong shape for it. A target is an entity id and a square is not an
+    entity. Rows that place an area already pick squares in the body with
+    `target=NO_TARGET`, which this row declares; what was missing was that
+    `c.choose` **announces nothing**, so the square was unobservable the
+    moment the body returned. `c.aim_at` is the announcement.
+
+    The sound itself still does nothing a board measures, and that is the
+    card. What the row now does is say *where*, which is the whole of what
+    the feat reading it needs.
+    """
+    here = squares(c.world, c.me)
+    if not here:
+        return
+    # **Filtered to the board, which a probe caught.** `spread` is pure
+    # geometry and happily returns negative coordinates, so the first
+    # draft offered 441 squares and the harness picked `(-4, -2)` -- a
+    # sound from off the map, and an aim point no enemy can ever stand
+    # beside, which would have made `f3292` look correct while never
+    # paying out.
+    spots = sorted(sq for sq in spread(here, 10) if c.world.grid.inside(sq))
+    if not spots:
+        return
+    spot = c.choose(spots, f"{c.ref}: the square the sound comes from")
+    if spot is None:
+        return
+    c.aim_at(spot)
 
 
 @power(

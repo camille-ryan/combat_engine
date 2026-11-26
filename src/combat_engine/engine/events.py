@@ -1252,6 +1252,33 @@ class FamiliarMode(Event):
 
 
 @dataclass
+class Aimed(Event):
+    """A row was aimed at a **square**, and says which.
+
+    `f3292` pays *"when you use your p1217, ... against one enemy
+    adjacent to the target object or square"*, and nothing could answer
+    which square that was. The chain had exactly one link missing:
+    `Cast.choose` routes through `World.decide` and **emits nothing**, so
+    a square picked inside a body is unobservable.
+
+    **Not a `Target` side, which is what the marker asked for.** `Target`
+    already has a non-creature kind -- `f3015b` declares
+    `Target("object", 1)` -- but that works because an object is an entity
+    with a `Position`, and there is nothing to be the entity for a bare
+    square. Every area-placing row already picks squares inside its body
+    with `target=NO_TARGET`, which is what `p1217` declares. So the gap
+    was the announcement, not the header.
+
+    `square` is where it was aimed; `ref` is the row, so *"when you use
+    <that row>"* is a predicate rather than a guess.
+    """
+
+    actor: int
+    ref: str = ""
+    square: Square | None = None
+
+
+@dataclass
 class ObjectPlaced(Event):
     """A thing that is not a creature arrived on the board.
 

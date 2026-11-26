@@ -12460,6 +12460,33 @@ class Cast:
             until=until, kind=self.ref,
         )
 
+    def aim_at(self, square: Square, *, who: int | None = None) -> None:
+        """Say which **square** this row was aimed at, so a rider can read it.
+
+        `Cast.choose` announces nothing -- it routes through `World.decide`
+        and emits no event -- so a square picked inside a body is
+        unobservable the moment the body returns. That is the whole of why
+        `f3292` could not be written: it pays *"against one enemy adjacent
+        to the target object or square"* and had no way to learn the
+        square.
+
+        Emits `Aimed`. Deliberately **not** a `Target` side: a target is an
+        entity id and a square is not an entity, which is why
+        `Target("object", 1)` works for `f3015b` and a square equivalent
+        cannot. Rows that place an area already choose squares in the body.
+
+        Announces and does nothing else. A row whose printed Effect has no
+        other board consequence -- `p1217` is one, a sound from a square --
+        is therefore observable rather than silent, which is the same
+        argument `Summoned` and `ObjectPlaced` carry for a spawn.
+        """
+        from .events import Aimed
+
+        self.world.bus.emit(Aimed(
+            actor=who if who is not None else self.me,
+            ref=self.ref, square=square,
+        ))
+
     def lose_mode(
         self, name: str, *, until: When = When.EOTNT, on: int | None = None
     ) -> Effect | None:

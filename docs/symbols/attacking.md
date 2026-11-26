@@ -7,6 +7,8 @@ Making an attack, and what the attack turns out to be.
 
 - `c.add_target(self, who: 'int', *, pending: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">) -> 'bool'`
   - "The ally also becomes a target of the power."
+- `c.aim_at(self, square: 'Square', *, who: 'int | None' = None) -> 'None'`
+  - Say which **square** this row was aimed at, so a rider can read it.
 - `c.also_hits(self, *, on: 'int | None' = None, ev: 'Any' = None) -> 'bool'`
   - "The triggering attack also hits the target."
 - `c.as_basic(self, *refs: 'str', window: 'str' = '', spent: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

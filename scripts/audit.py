@@ -183,6 +183,34 @@ KNOWN_SILENT = {
                "powers and the board's enemies hold none -- 17 attack "
                "powers, 0 arcane, measured. Oscillates with the draw; "
                "drivers.proof_against_a_power is the proof. #1517",
+    # **`f3292` needs two things the board withholds, both measured.**
+    # Its clause is *"when you use your p1217, you can spend 1 power point
+    # to gain combat advantage ... against one enemy adjacent to the target
+    # object or square"*, and on `audit.board("f3292", 1)`:
+    #
+    #   * the caster **does** hold `p1217` -- so that half is not the gap --
+    #   * it has **no `PowerPoints` component at all**, so
+    #     `c.spend_points(1)` returns 0 and the row correctly declines;
+    #   * and nothing on a board emits `Aimed`, because no board action
+    #     aims at a square.
+    #
+    # Both are properties of the harness rather than of the row, which is
+    # what makes this an excuse about the *board* -- the distinction
+    # `scripts/CLAUDE.md` draws. `#1411` is the board gap for the first.
+    #
+    # `drivers.aimed_square` is the proof and stages exactly what the board
+    # cannot: points in the pool and an `Aimed` at a square with one enemy
+    # beside it. Twelve arms, four plants, each red on its own arm --
+    # including the one that matters here, laying the grant on every enemy
+    # instead of the chosen one.
+    #
+    # It does **not** oscillate with the draw: the missing `PowerPoints` is
+    # structural, not a hand the dealer sometimes gives. Delete this entry
+    # when the board grants a feat's holder its class resources.
+    "f3292": "spends a power point it has not got -- the board hands a "
+             "feat's holder no `PowerPoints` at all, and nothing on a "
+             "board emits `Aimed`, so the trigger never fires either. "
+             "drivers.aimed_square stages both and is the proof. #1411",
     "i3037x1": "pays only while its weapon is in the off hand, and the "
                "board deals one weapon, so `gear.off` is None and the "
                "gate is correctly False. drivers.off_hand_item stages a "
@@ -2139,6 +2167,18 @@ DID_SOMETHING = {
     # `c.as_implement` and nothing else. #1164 and `UseRestored`'s own
     # argument, #899.
     "InitiativeChanged", "WeaponIsImplement",
+    # **A row whose whole printed Effect is "aimed at that square".**
+    # `p1217` is a sound from a square the caster picks: it changes no
+    # state at all, which is the card, and the only thing it *can* do is
+    # say where. `Cast.aim_at` emits `Aimed` for the feat that reads it
+    # (`f3292`), and without this line the row is silent by construction
+    # in the same way `c.initiative` and `c.as_implement` were above.
+    #
+    # Admitted rather than waived, and the distinction from a `Note` is
+    # the one this set already draws: `Aimed` carries `actor` and `ref`,
+    # so it is attributable to the row that aimed. A `Note` is refused
+    # here precisely because it is not.
+    "Aimed",
     # **Two more of the same family, and the first of them was named by its
     # own verb's docstring.** `c.regain_surge` says a row handing a surge
     # back "announces nothing and audits as a row that did nothing at all",

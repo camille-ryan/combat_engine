@@ -119,6 +119,7 @@ from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
     ActionPointSpent,
     ActionSpent,
+    Aimed,
     AttackDeclared,
     AttackRolled,
     ConditionApplied,
@@ -138,6 +139,7 @@ from combat_engine.engine.events import (
     PowerUsed,
     SkillCheck,
 )
+from combat_engine.engine.grid import spread
 from combat_engine.engine.query import (
     alive,
     allies,
@@ -2215,9 +2217,24 @@ def f3276(c: Cast) -> None:
         c.slide(1, on=c.trigger.target)
 
 
-@power("f3292", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+def _aimed_with(ref: str):  # noqa: ANN202
+    """*"When you use your <row>"*, where the row announces a square.
+
+    `_used` next door reads `ev.power` off `PowerResolved`; `Aimed` carries
+    `ref` instead, for the same reason `ObjectPlaced` does -- `ref` is this
+    tree's word for a row, and the event is not about a power resolving.
+    """
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.ref == ref
+
+    return when
+
+
+@power("f3292", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Target.square",))
+       trigger="you use p1217",
+       on=Trigger(Aimed, _aimed_with("p1217"), "you use that power"))
 def f3292(c: Cast) -> None:
     """Hangs combat advantage off an enemy standing beside the *object or
     square* the cantrip was aimed at. `Target` has sides for creatures and
@@ -2243,7 +2260,54 @@ def f3292(c: Cast) -> None:
     `f2468` in `rogue_b.py` sits in with a declared trigger on the same
     ref. Whoever lands `Target.square` has to re-declare `p1217` with the
     square it aims at, which is what takes the flag off; the flag is a
-    consequence of there being nothing to aim at, not a second gap."""
+    consequence of there being nothing to aim at, not a second gap.
+
+    **Landed, and `Target.square` was the wrong shape.** A target is an
+    entity id and a square is not an entity -- which is why
+    `Target("object", 1)` works for `f3015b` and a square version cannot.
+    Every area-placing row already picks squares inside its body with
+    `target=NO_TARGET`, which is what `p1217` declares. The one missing
+    link was that `Cast.choose` **announces nothing**: it routes through
+    `World.decide` and emits no event, so the square was unobservable the
+    moment the body returned. `c.aim_at` announces it, `Aimed` carries it,
+    and this row reads `c.trigger.square`.
+
+    The flag came off `p1217` as part of that, which is what the paragraph
+    above predicted, and Camille's ruling on `#1597` covers it.
+
+    **`usage=AT_WILL`, corrected from `ENCOUNTER`.** The card prints no
+    per-encounter limit -- the limit is the power points, one per use --
+    and `content/CLAUDE.md` is explicit that `ENCOUNTER` on a row with a
+    *declared trigger* really does mean once per fight, so leaving it
+    would have been a silent narrowing of the printed clause.
+
+    **The choice is the consent.** *"You can spend 1 power point"* is
+    opt-in, and declining `c.choose` is how that is said -- no point is
+    spent unless an enemy was picked, and none is spent when the sound was
+    aimed somewhere with no enemy beside it.
+
+    Strictly **adjacent**: the eight neighbours of the square, not the
+    square itself. A creature standing in the chosen square is not
+    adjacent to it by the printed meaning of the word, and reading it the
+    other way would make the clause pay out more often than the card
+    does."""
+    spot = c.trigger.square
+    if spot is None:
+        return
+    beside = spread({spot}, 1) - {spot}
+    foes = sorted(f for f in c.enemies() if squares(c.world, f) & beside)
+    if not foes:
+        return
+    pick = c.choose(foes, f"{c.ref}: the enemy to gain combat advantage on")
+    if pick is None:
+        return
+    if c.spend_points(1) < 1:
+        return
+    # `once=True` and `When.EOT` are the printed window together: "your
+    # next attack made before the end of your turn". The grant sits on the
+    # enemy because combat advantage is a fact about a pair -- `p7399` is
+    # the sibling doing the same thing for every enemy at once.
+    c.grants_advantage(on=pick, until=When.EOT, once=True)
 
 
 @power("f3295", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

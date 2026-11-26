@@ -138236,6 +138236,182 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def an_aimed_square_is_announced_and_a_feat_reads_it(out: Result) -> None:
+    """*"When you use your p1217, you can spend 1 power point to gain combat
+    advantage ... against one enemy adjacent to the target object or
+    square."* -- `f3292`, which had nothing to read.
+
+    **The marker said `Target.square` and that was the wrong shape.** A
+    target is an entity id and a square is not an entity -- which is why
+    `Target("object", 1)` works for `f3015b` and a square version cannot --
+    and every area-placing row already picks squares inside its body with
+    `target=NO_TARGET`, as `p1217` declares. The missing link was one step
+    further in: **`Cast.choose` announces nothing.** It routes through
+    `World.decide` and emits no event, so a square picked in a body is
+    unobservable the moment the body returns.
+
+    So `c.aim_at` emits `Aimed`, which carries the square and the row's
+    ref, and this feat answers it. Camille's ruling on `#1597` is what took
+    `out_of_combat=True` off `p1217`, and `f3292`'s own note had predicted
+    that landing the facility is what would do it.
+
+    **Why this rule has to exist rather than the audit board proving it.**
+    Measured: the board's caster for `f3292` *does* hold `p1217`, but has
+    no `PowerPoints` component at all -- so `c.spend_points(1)` returns 0
+    and the row correctly declines -- and nothing on a board emits `Aimed`,
+    because no board action aims at a square. Both are properties of the
+    harness rather than of the row, which is why `f3292` carries a
+    `KNOWN_SILENT` entry naming this rule. `#1411` is the board gap.
+    """
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, PowerPoints
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Aimed, PointsSpent
+    from combat_engine.engine.types import Relation, Usage
+
+    AIM, FEAT = "p1217", "f3292"
+
+    # ---- the announcement ----------------------------------------------
+    world, me, _ev = _board(AIM, 1)
+    out.that(not REGISTRY[AIM].out_of_combat,
+             "the cantrip is NOT out_of_combat -- Camille's ruling on"
+             " #1597, and nothing below is reachable while the flag is on:"
+             " `actions.legal` skips such a row outright",
+             f"{REGISTRY[AIM].out_of_combat}")
+    out.that(REGISTRY[FEAT].usage is Usage.AT_WILL,
+             "and the feat is AT_WILL, not ENCOUNTER -- the card prints no"
+             " per-encounter limit, the power points are the limit, and"
+             " `ENCOUNTER` on a row with a DECLARED trigger really does"
+             " mean once per fight",
+             f"{REGISTRY[FEAT].usage}")
+
+    # **Offered in the menu, which is the claim the flag is really
+    # about.** Reading `REGISTRY[...].out_of_combat` says what the row
+    # declares; `actions.legal` says what a fight does with it, and
+    # `actions.legal` is the thing that skipped the row outright. Measured
+    # here rather than inferred.
+    offered = {
+        a.ref for a in _actions.legal(world, world.encounter, me)
+    }
+    out.that(AIM in offered,
+             "and `actions.legal` OFFERS it -- the flag's whole effect was"
+             " that this list skipped the row, so the declaration alone"
+             " would not have proved the un-flagging did anything",
+             f"{len(offered)} refs offered")
+
+    mark = len(world.bus.log)
+    REGISTRY[AIM].body(Cast(world=world, me=me, ref=AIM))
+    said = [e for e in world.bus.log[mark:] if isinstance(e, Aimed)]
+    out.that(len(said) == 1,
+             "using the cantrip announces an aim point exactly once --"
+             " `c.choose` emits nothing, so without this the square is"
+             " unobservable and the feat has nothing to answer",
+             f"{len(said)}")
+    if not said:
+        return
+    out.that(said[0].ref == AIM and said[0].actor == me,
+             "and the event says which row aimed and who aimed it, so"
+             " *'when you use YOUR cantrip'* is a predicate rather than a"
+             " guess",
+             f"{said[0].ref}/{said[0].actor}")
+    out.that(said[0].square is not None
+             and world.grid.inside(said[0].square),
+             "and the square is ON the board -- `spread` is pure geometry"
+             " and returned negative coordinates, so the first draft aimed"
+             " at (-4, -2), where no enemy can ever stand beside it",
+             f"{said[0].square}")
+
+    # ---- the feat reading it -------------------------------------------
+    world2, me2, _e2 = _board(FEAT, 1)
+    world2.add(me2, PowerPoints(points=4, maximum=4))
+    foes = sorted(query.enemies(world2, me2))
+    near, far = foes[0], foes[1]
+    world2.need(me2, Position).square = (10, 10)
+    world2.need(near, Position).square = (12, 10)
+    world2.need(far, Position).square = (18, 18)
+    spot = (13, 10)                       # adjacent to `near`, far from `far`
+
+    before = world2.get(me2, PowerPoints).points
+    mark2 = len(world2.bus.log)
+    world2.bus.emit(Aimed(actor=me2, ref=AIM, square=spot))
+    spent = [e for e in world2.bus.log[mark2:] if isinstance(e, PointsSpent)]
+
+    out.that(len(spent) == 1,
+             "the feat spends a power point when the sound lands beside an"
+             " enemy -- one, which is what the card charges",
+             f"{len(spent)}")
+    out.that(world2.get(me2, PowerPoints).points == before - 1,
+             "and exactly one point leaves the pool",
+             f"{before} -> {world2.get(me2, PowerPoints).points}")
+    # **Asked of the relation this row lays, not of
+    # `query.has_combat_advantage`.** The aggregate reads flanking,
+    # conditions and whatever the board pre-set, and on this board it is
+    # already True for an enemy nowhere near the sound -- so the first
+    # draft's negative control failed while the row was correct. An
+    # aggregate cannot see a misattribution; the relation can.
+    granted = set(world2.relations.targets(Relation.GRANTS_CA_TO, near))
+    out.that(me2 in granted,
+             "and the enemy ADJACENT to the aimed square grants combat"
+             " advantage TO THIS CHARACTER -- the printed payout, read off"
+             " the `GRANTS_CA_TO` relation the row lays",
+             f"{sorted(granted)}")
+    others = set(world2.relations.targets(Relation.GRANTS_CA_TO, far))
+    out.that(me2 not in others,
+             "while an enemy nowhere near it grants nothing -- the negative"
+             " control, and without it the row could be laying the grant on"
+             " every enemy and still look right",
+             f"{sorted(others)}")
+
+    # ---- aimed at nothing: no point is spent ---------------------------
+    world3, me3, _e3 = _board(FEAT, 2)
+    world3.add(me3, PowerPoints(points=4, maximum=4))
+    world3.need(me3, Position).square = (10, 10)
+    for other in query.enemies(world3, me3):
+        world3.need(other, Position).square = (19, 19)
+    had = world3.get(me3, PowerPoints).points
+    world3.bus.emit(Aimed(actor=me3, ref=AIM, square=(3, 3)))
+    out.that(world3.get(me3, PowerPoints).points == had,
+             "a sound aimed where no enemy stands spends NOTHING -- *'you"
+             " can spend'* is opt-in, and a row that charged for nothing"
+             " would be strictly worse than the card",
+             f"{had} -> {world3.get(me3, PowerPoints).points}")
+
+    # ---- strict adjacency ----------------------------------------------
+    world4, me4, _e4 = _board(FEAT, 3)
+    world4.add(me4, PowerPoints(points=4, maximum=4))
+    two_away = sorted(query.enemies(world4, me4))[0]
+    world4.need(me4, Position).square = (10, 10)
+    for other in query.enemies(world4, me4):
+        world4.need(other, Position).square = (19, 19)
+    world4.need(two_away, Position).square = (14, 10)
+    kept = world4.get(me4, PowerPoints).points
+    world4.bus.emit(Aimed(actor=me4, ref=AIM, square=(12, 10)))
+    out.that(world4.get(me4, PowerPoints).points == kept,
+             "an enemy TWO squares from the aimed square does not qualify"
+             " -- 'adjacent' is the eight neighbours, and reading it wider"
+             " would pay out more often than the card does",
+             f"{kept} -> {world4.get(me4, PowerPoints).points}")
+
+    # ---- with no points at all -----------------------------------------
+    world5, me5, _e5 = _board(FEAT, 4)
+    world5.add(me5, PowerPoints(points=0, maximum=4))
+    broke = sorted(query.enemies(world5, me5))[0]
+    world5.need(me5, Position).square = (10, 10)
+    world5.need(broke, Position).square = (12, 10)
+    mark5 = len(world5.bus.log)
+    world5.bus.emit(Aimed(actor=me5, ref=AIM, square=(13, 10)))
+    paid = [e for e in world5.bus.log[mark5:] if isinstance(e, PointsSpent)]
+    laid = set(world5.relations.targets(Relation.GRANTS_CA_TO, broke))
+    out.that(not paid and me5 not in laid,
+             "and a character with no power points gains nothing -- the"
+             " spend is the gate, which is also why the audit board reports"
+             " this row silent: it hands a feat's holder no `PowerPoints`"
+             " at all (#1411)",
+             f"spent={len(paid)} granted={sorted(laid)}")
+
+
 def a_silencing_zone_blocks_sound_through_it_but_not_around_it(
     out: Result,
 ) -> None:
@@ -142578,6 +142754,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "aimed_square": (
+        an_aimed_square_is_announced_and_a_feat_reads_it,
+        "p1217 announces the square it is aimed at and f3292 reads it,"
+        " which `Target.square` could never have been (#1597)",
     ),
     "silencing_zone": (
         a_silencing_zone_blocks_sound_through_it_but_not_around_it,
