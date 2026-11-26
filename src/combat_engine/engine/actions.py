@@ -1325,7 +1325,7 @@ def _commands(world: World, encounter: Encounter, actor: int) -> list[Action]:
                 key = _recast_key("command", cost)
                 if _recast_used(world, own, key) >= granted[cost]:
                     continue
-            if not encounter.can_spend(actor, cost):
+            if not encounter.can_spend(actor, cost, purpose="command"):
                 continue
             # Aimed from the **beast**: reach, cover and flanking are all
             # measured from its square, and `_aimings` already does that for
@@ -1365,7 +1365,10 @@ def _commands(world: World, encounter: Encounter, actor: int) -> list[Action]:
             row = get(ref)
             if row is None or not usable(world, eid, row)[0]:
                 continue
-            if not encounter.can_spend(actor, cost):
+            # **With the purpose**, so a grant earmarked for commanding
+            # makes the command appear even when the ordinary budget is
+            # empty -- which is the whole of what `i2897p1` prints.
+            if not encounter.can_spend(actor, cost, purpose="command"):
                 continue
             for aim in _aimings(world, eid, ref, cost=cost):
                 out.append(
@@ -3611,7 +3614,14 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             for t in action.targets
         ):
             return False
-    if not encounter.spend(actor, action.cost):
+    # **`purpose=action.kind`, which is the whole of the threading.** Every
+    # action a menu offers is spent here, once, generically -- so one
+    # argument gives every kind a purpose and a purpose-restricted grant
+    # (`Budget.earmarked`) can pay for the kind it was given for. `#1569`
+    # priced this as "threading a purpose from the callers" and there are
+    # no callers to thread: the 22 direct `Encounter.spend` sites are rows
+    # paying for their own clauses and keep the empty default.
+    if not encounter.spend(actor, action.cost, purpose=action.kind):
         return False
 
     if action.kind == "power":

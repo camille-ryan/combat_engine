@@ -104,7 +104,7 @@ Things a creature spends, and the budget it spends them from.
   - How many action points this creature could spend right now.
 - `c.end_turn(self) -> 'bool'`
   - "Your turn ends when you use this power."
-- `c.extra_action(self, cost: 'ActionType' = <ActionType.MOVE: 'move'>, *, on: 'int | None' = None) -> 'bool'`
+- `c.extra_action(self, cost: 'ActionType' = <ActionType.MOVE: 'move'>, *, on: 'int | None' = None, what: 'str' = '') -> 'bool'`
   - "You can take an extra move action."
 - `c.extra_turn(self, at: 'int') -> 'bool'`
   - Act again this round, at that initiative count. Solos do this.

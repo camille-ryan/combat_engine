@@ -23003,7 +23003,8 @@ class Cast:
     # -- the action economy --------------------------------------------------
 
     def extra_action(
-        self, cost: ActionType = ActionType.MOVE, *, on: int | None = None
+        self, cost: ActionType = ActionType.MOVE, *, on: int | None = None,
+        what: str = "",
     ) -> bool:
         """"You can take an extra move action."
 
@@ -23016,6 +23017,22 @@ class Cast:
         invisible: a row whose whole printed effect is this one line left
         nothing in the log and nothing for another row to answer.
 
+        **`what` restricts it to one purpose**, which `Budget`'s flat
+        counters could not say. *"An extra move action that you can use
+        only to command the creature"* -- `i2897p1` -- so the grant goes
+        into `Budget.earmarked` instead, and `Encounter.spend` will take it
+        only for an action of that kind. `actions.perform` passes
+        `action.kind` as the purpose, so the word here is an action kind:
+        `"command"` for that card.
+
+        Unrestricted by default, so the thirty-odd existing callers are
+        untouched and an ordinary extra action still lands in the plain
+        counter where everything already reads it.
+
+        **An earmarked grant is spent LAST**, which is the holder's
+        interest rather than the engine's convenience: a character with a
+        move still in hand spends that one and keeps the narrower grant.
+
         Yours, so it defaults to the **caster**.
         """
         from .components import Budget
@@ -23025,7 +23042,11 @@ class Cast:
         budget = self.world.get(who, Budget) or self.world.add(who, Budget())
         if not hasattr(budget, cost.value):
             return False
-        setattr(budget, cost.value, getattr(budget, cost.value) + 1)
+        if what:
+            key = f"{what}:{cost.value}"
+            budget.earmarked[key] = budget.earmarked.get(key, 0) + 1
+        else:
+            setattr(budget, cost.value, getattr(budget, cost.value) + 1)
         self.world.bus.emit(ActionGranted(actor=who, cost=cost))
         return True
 

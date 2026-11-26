@@ -2530,10 +2530,31 @@ class Budget:
     immediate_round: int = -1
     opportunity_turn: int = -1
 
+    #: Actions granted **for one purpose only**, keyed `"<purpose>:<cost>"`.
+    #:
+    #: The flat counters above hold no record of what bought them, so a
+    #: card printing *"an extra move action that you can use only to
+    #: command the creature"* -- `i2897p1` -- had nowhere to put the
+    #: restriction, and the row dropped the clause and granted an
+    #: unrestricted move instead. `m5641a8` prints the same shape from the
+    #: other side.
+    #:
+    #: **Spent before the ordinary slots and only on a matching purpose.**
+    #: `Encounter.spend` takes a `purpose` and `actions.perform` passes
+    #: `action.kind`, so every menu action carries one; a spend with no
+    #: purpose cannot reach these at all, which is what keeps a restricted
+    #: grant from quietly paying for anything else.
+    #:
+    #: Cleared by `refresh`, like the counters: the grant is for the turn
+    #: it was given on, which is what *"at the start of each of your
+    #: turns"* means.
+    earmarked: dict[str, int] = field(default_factory=dict)
+
     def refresh(self) -> None:
         self.standard = 1
         self.move = 1
         self.minor = 1
+        self.earmarked.clear()
 
 
 @dataclass

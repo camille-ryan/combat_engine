@@ -4675,7 +4675,6 @@ def i2897x1(c: Cast) -> None:
     target=SELF,
     trigger="you use a summoning power",
     on=Trigger(PowerUsed, _my_summoning, "you use a summoning power"),
-    dropped=("c.extra_action(what=)",),
 )
 def i2897p1(c: Cast) -> None:
     """The extra move action is handed out at the start of each of your
@@ -4696,10 +4695,11 @@ def i2897p1(c: Cast) -> None:
     That is why the test sits in the handler rather than beside the arming:
     asked once here it would be False every time.
 
-    The marker is kept and is a parameter rather than a facility.
-    `c.extra_action(cost, on=)` drops one action into the budget the turn is
-    already spending and `Budget` holds counts with no record of what bought
-    them, so there is nowhere for "only to command" to live.
+    **The restriction is written now, and `#1569` had its price wrong.**
+    `c.extra_action(cost, on=, what=)` takes the purpose, and `Budget`
+    carries `earmarked` -- grants held by `"<purpose>:<cost>"` rather than
+    in the flat counters, which really did have no record of what bought
+    them.
     Checked rather than assumed: `c.grant_action(what, cost)` does take a
     `what`, and is the opposite sentence -- it reprices an *ordinary* thing
     ("allies can stand up as a minor action") and grants no extra action at
@@ -4722,16 +4722,37 @@ def i2897p1(c: Cast) -> None:
     budget holding one restricted action cannot tell a command from
     anything else asking for a move.
 
-    So the shape is a purpose on `spend` plus a tagged entry on
-    `Budget`, and the cost is threading that purpose from the callers --
-    which is why this one is **not** one chokepoint away. The grant is
-    still where the restriction is declared, so the marker stays on
-    `c.extra_action(what=)`; this paragraph records where it would be
-    enforced so the next pass does not re-derive it. #1569."""
+    The shape is a purpose on `spend` plus a tagged entry on `Budget`, and
+    **there turned out to be nothing to thread.** `actions.perform` spends
+    every action a menu offers at one generic site, so
+    `purpose=action.kind` is a single line and gives every kind a purpose;
+    the 22 direct `Encounter.spend` callers are rows paying for their own
+    clauses and keep the empty default, which is correct -- an
+    unrestricted spend must not be able to take a restricted grant.
+
+    `can_spend` takes the purpose too, because otherwise the command is
+    never *offered* when the ordinary budget is empty, and that is exactly
+    the case this card exists to create. The two command offers in
+    `actions._commands` ask with `purpose="command"`; the other 59
+    `can_spend` sites pass nothing and cannot see an earmarked action.
+
+    **Spent last, deliberately.** A character with a move still in hand
+    spends that one on a command and keeps the narrower grant, which is
+    the holder's interest -- checking the earmark first would burn the
+    restricted resource while an ordinary one sat unused.
+
+    `m5641a8` wants the same mechanism from the other side
+    (`c.extra_action(must_attack=)`), so the facility is two rows' worth
+    and its marker can be re-pointed at the word rather than the field.
+    #1569."""
 
     def each_round(ev: TurnStart) -> None:
         if ev.actor == c.me and _a_summon_stands(c):
-            c.extra_action(MOVE, on=c.me)
+            # `what="command"` is the printed restriction, and the word is
+            # an **action kind** rather than a label: `actions.perform`
+            # spends every menu action with `purpose=action.kind`, and a
+            # summon's commands are offered as `kind="command"`.
+            c.extra_action(MOVE, on=c.me, what="command")
 
     c.watch(TurnStart, each_round, until=When.ENCOUNTER)
 

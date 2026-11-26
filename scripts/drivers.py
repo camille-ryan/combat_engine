@@ -138302,6 +138302,151 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def a_restricted_extra_action_pays_only_for_its_purpose(out: Result) -> None:
+    """*"You gain an extra move action that you can use only to command the
+    creature"* -- `i2897p1`, whose restriction had nowhere to live.
+
+    **`#1569` priced this as "not one chokepoint away" and the price was
+    wrong.** Its reasoning ended: *"the shape is a purpose on `spend` plus
+    a tagged entry on `Budget`, and the cost is threading that purpose
+    from the callers."* There are no callers to thread --
+    `actions.perform` spends every action a menu offers at **one** generic
+    site, so `purpose=action.kind` is a single line and gives every kind a
+    purpose for free. The 22 direct `Encounter.spend` sites are rows paying
+    for their own clauses and keep the empty default.
+
+    Three properties are worth holding down, and each has an arm:
+
+    * **a purpose can only widen.** It is consulted after the ordinary
+      budget has said no, so the 59 `can_spend` sites that pass nothing
+      keep today's answer exactly. That is what makes the parameter safe
+      to add rather than a change to every call.
+    * **the earmark is spent LAST.** A character with a move in hand
+      spends that one and keeps the narrower grant -- the holder's
+      interest, not the engine's convenience.
+    * **and only on a match.** An unrestricted spend, or one for another
+      kind, cannot reach it. Without that the card would be an extra move
+      action for anything, which is what the row granted while the clause
+      was dropped.
+    """
+    import inspect
+
+    from combat_engine.engine import actions, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Summon
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.types import ActionType
+
+    ROW = "i2897p1"
+    world, me, _ev = _board(ROW, 1)
+    enc = world.encounter
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "the row carries no marker, where it was"
+             " `dropped=('c.extra_action(what=)',)`",
+             f"{REGISTRY[ROW].unfinished}")
+
+    c = Cast(world=world, me=me, ref=ROW)
+    budget = world.get(me, Budget) or world.add(me, Budget())
+
+    # **The ROW's own grant, driven through its watch.** An earlier draft
+    # called `c.extra_action` directly and never touched the row, so the
+    # plant that makes it grant an unrestricted move again reddened
+    # nothing. `_a_summon_stands` is what the handler gates on, so a
+    # `Summon` owned by this character is the staging it needs.
+    REGISTRY[ROW].body(c)
+    stand_in = sorted(query.enemies(world, me))[0]
+    world.add(stand_in, Summon(by=me, ref=ROW))
+    budget.refresh()
+    world.bus.emit(TurnStart(actor=me, round=world.round))
+    out.that(budget.earmarked.get("command:move", 0) == 1,
+             "the ROW grants a move earmarked for commanding while its"
+             " summon stands -- driven through its own watch, so this is"
+             " the card and not just the facility",
+             f"{dict(budget.earmarked)}")
+    out.that(budget.move == 1,
+             "and leaves the ordinary move counter alone",
+             f"{budget.move}")
+
+    budget.refresh()
+    before_move = budget.move
+
+    c.extra_action(ActionType.MOVE, on=me, what="command")
+    out.that(budget.move == before_move,
+             "a restricted grant does NOT land in the ordinary move"
+             " counter -- which is the whole point: everything already"
+             " reads that counter and would spend the grant on anything",
+             f"{before_move} -> {budget.move}")
+    out.that(budget.earmarked.get("command:move", 0) == 1,
+             "it lands in `Budget.earmarked`, keyed by purpose and cost --"
+             " the record the flat counters could not keep",
+             f"{dict(budget.earmarked)}")
+
+    # ---- the ordinary budget is spent first ----------------------------
+    out.that(enc.spend(me, ActionType.MOVE, purpose="command"),
+             "premise: a command can be paid for while an ordinary move is"
+             " in hand",
+             "paid")
+    out.that(budget.earmarked.get("command:move", 0) == 1,
+             "and it took the ORDINARY move, leaving the grant alone -- a"
+             " holder keeps the narrower resource as long as something"
+             " else can pay",
+             f"{dict(budget.earmarked)}")
+
+    # ---- now only the grant can pay ------------------------------------
+    # **The whole budget is emptied, not just the move.** `DOWNGRADES`
+    # lets a standard be spent as a move, so clearing `move` alone left
+    # `can_spend(MOVE)` True off the standard and the earmark was never
+    # reached -- four arms failed on that staging and none of them was
+    # about the row.
+    budget.standard = budget.move = budget.minor = 0
+    out.that(not enc.can_spend(me, ActionType.MOVE),
+             "with the budget empty, an unrestricted move is refused --"
+             " the state this card exists to change",
+             f"{budget.standard}/{budget.move}/{budget.minor}")
+    out.that(enc.can_spend(me, ActionType.MOVE, purpose="command"),
+             "but a COMMAND is still available, off the grant -- and this"
+             " is the arm that makes the clause mean anything",
+             f"{dict(budget.earmarked)}")
+    out.that(not enc.can_spend(me, ActionType.MOVE, purpose="walk"),
+             "while another purpose is not -- *'only to command'*, which"
+             " without this arm would be an extra move for anything",
+             f"walk:move={budget.earmarked.get('walk:move', 0)}")
+
+    out.that(enc.spend(me, ActionType.MOVE, purpose="command"),
+             "and spending the command takes the grant",
+             "paid")
+    out.that(budget.earmarked.get("command:move", 0) == 0,
+             "which is now gone",
+             f"{dict(budget.earmarked)}")
+    out.that(not enc.can_spend(me, ActionType.MOVE, purpose="command"),
+             "and a second command is refused -- one grant, one action",
+             f"{dict(budget.earmarked)}")
+
+    # ---- the turn clears it --------------------------------------------
+    c.extra_action(ActionType.MOVE, on=me, what="command")
+    budget.refresh()
+    out.that(not budget.earmarked,
+             "a new turn clears the grant -- *'at the start of each of"
+             " your turns'* means the one it was given on, and an earmark"
+             " surviving the turn would stack all fight",
+             f"{dict(budget.earmarked)}")
+
+    # ---- and perform passes the kind as the purpose --------------------
+    # **The whole call, not the fragment.** The first version asserted
+    # `"purpose=action.kind" in source` and the plant that removes it from
+    # the call reddened **nothing** -- the explanatory comment above that
+    # line contains the same words. A source check satisfied by its own
+    # documentation is worse than no check.
+    spends = "encounter.spend(actor, action.cost, purpose=action.kind)"
+    out.that(spends in inspect.getsource(actions.perform),
+             "and `actions.perform` spends with the kind as the purpose,"
+             " which is the one line that gives every action kind a"
+             " purpose -- the thing `#1569` priced as threading",
+             "one line")
+
+
 def an_uncommanded_summon_turns_on_its_summoner(out: Result) -> None:
     """*"Each round, if you do not give the silt elemental any commands, you
     must make a saving throw at the end of your turn; if you fail the
@@ -143840,6 +143985,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "earmarked_action": (
+        a_restricted_extra_action_pays_only_for_its_purpose,
+        "i2897p1's extra move action pays only for commanding, off"
+        " Budget.earmarked and perform's one generic spend (#1569)",
     ),
     "uncommanded_summon": (
         an_uncommanded_summon_turns_on_its_summoner,

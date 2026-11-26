@@ -713,9 +713,25 @@ class Encounter:
 
     # -- spending actions ----------------------------------------------------
 
+    @staticmethod
+    def _earmark(purpose: str, what: ActionType) -> str:
+        """The key a purpose-restricted grant is held under."""
+        return f"{purpose}:{what.value}"
+
     def can_spend(
-        self, eid: int, what: ActionType, *, ignoring: Condition | None = None
+        self, eid: int, what: ActionType, *, ignoring: Condition | None = None,
+        purpose: str = "",
     ) -> bool:
+        """Is that action available? `purpose` is what it would be spent ON.
+
+        **A purpose can only ever widen this**, which is the property that
+        makes the parameter safe to add: it is consulted after the ordinary
+        budget has already said no, so every one of the 59 call sites that
+        passes nothing keeps exactly today's answer. `i2897p1` grants *"an
+        extra move action that you can use only to command the creature"*,
+        and without a purpose that grant is invisible -- correctly, because
+        an unrestricted spend must not be able to take it.
+        """
         budget = self.world.get(eid, Budget)
         if budget is None:
             return False
@@ -736,13 +752,30 @@ class Encounter:
             return False
         if self._one_action(eid):
             return budget.standard + budget.move + budget.minor > 0
-        return any(getattr(budget, slot.value) > 0 for slot in DOWNGRADES[what])
+        if any(getattr(budget, slot.value) > 0 for slot in DOWNGRADES[what]):
+            return True
+        # **Last, so an earmarked action is spent only when nothing else
+        # can pay.** A character with a move still in hand should spend
+        # that one on a command and keep the restricted grant for later;
+        # checking this first would burn the narrower resource first,
+        # which is the wrong way round for the holder.
+        return bool(purpose) and budget.earmarked.get(
+            self._earmark(purpose, what), 0
+        ) > 0
 
     def spend(
-        self, eid: int, what: ActionType, *, ignoring: Condition | None = None
+        self, eid: int, what: ActionType, *, ignoring: Condition | None = None,
+        purpose: str = "",
     ) -> bool:
-        """Take the action if it is available. Returns False if it was not."""
-        if not self.can_spend(eid, what, ignoring=ignoring):
+        """Take the action if it is available. Returns False if it was not.
+
+        `purpose` is what the action is being spent **on**, and
+        `actions.perform` passes `action.kind` -- so every action a menu
+        offers carries one and a purpose-restricted grant can pay for it.
+        Rows spending an action directly for their own clauses pass
+        nothing and are unaffected.
+        """
+        if not self.can_spend(eid, what, ignoring=ignoring, purpose=purpose):
             return False
         self.world.bus.emit(ActionSpent(actor=eid, cost=what))
         budget = self.world.need(eid, Budget)
@@ -777,6 +810,13 @@ class Encounter:
             if getattr(budget, slot.value) > 0:
                 setattr(budget, slot.value, getattr(budget, slot.value) - 1)
                 return True
+        # **The earmarked grant, last and only on a match**, in the same
+        # order `can_spend` answers in: the ordinary budget is spent first
+        # so the narrower resource survives as long as it can.
+        key = self._earmark(purpose, what)
+        if purpose and budget.earmarked.get(key, 0) > 0:
+            budget.earmarked[key] -= 1
+            return True
         return False
 
     def _one_action(self, eid: int) -> bool:
