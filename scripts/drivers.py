@@ -123310,6 +123310,30 @@ UNNAMED_KINDS_OWED = frozenset(
         # either, while the table would claim a decision had been made.
         "aid_attack",
         "aid_defence",
+        # **`diversion` is owed by the same ruling that owes `feint`, and
+        # it is the same printed entry.** CREATE A DIVERSION TO HIDE sits
+        # directly beneath GAIN COMBAT ADVANTAGE in the Bluff skill entry:
+        # both are a standard action, both once per encounter, both
+        # opposed by passive Insight. `actions._feinting` records Camille's
+        # call on its sibling --
+        #
+        #     "feint is generally not a good option. It has very niche
+        #      use. Rogues who can't sneak attack this turn might be the
+        #      only ones who'd want to use it."
+        #
+        # -- and the diversion is the sharper version of the same
+        # judgement: it spends the most expensive action for a hide that
+        # lasts until the end of the current turn and breaks the moment
+        # the hider attacks, so its worth is almost entirely "is this the
+        # better play right now", which is exactly the capability `#890`
+        # defers.
+        #
+        # **Added as owed rather than priced, and that is a judgement I am
+        # making by analogy rather than a ruling I hold.** A guessed weight
+        # would claim the question had been answered, and a declared `0.0`
+        # is worse than owing it -- `is_end` is 0.001, so a zero loses to
+        # ending the turn while the table claims a decision was made.
+        "diversion",
         # **`surge_for_points` is owed under the same standing ruling**,
         # and the judgement is unusually sharp: it trades a healing surge
         # -- which is hit points and a second wind -- for 2 power points
@@ -138278,6 +138302,205 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def creating_a_diversion_hides_you_and_may_hide_an_ally(out: Result) -> None:
+    """CREATE A DIVERSION TO HIDE, a printed action the engine did not offer.
+
+    Off the Bluff skill entry, beside the feint and read from the page:
+
+        Action: Standard action. A creature can take this action only once
+                per encounter.
+        Opposed Check: Against a target's passive Insight. The target must
+                be able to see the creature creating the diversion. A
+                creature can make the check against multiple targets at
+                once, opposing the passive Insight of each target with a
+                single Bluff check.
+        Success: The creature can immediately make a Stealth check opposed
+                by the passive Perception of any target that failed the
+                opposed Bluff check. If the Stealth check succeeds against
+                a target, the creature becomes hidden from that target
+                until the end of the current turn or until immediately
+                after the hidden creature makes an attack.
+
+    **The diversion is what replaces cover**, which is the whole reason it
+    is a separate action from `_hiding`. That one gates on superior cover
+    or total concealment -- the printed requirement for *becoming* hidden
+    -- and this page grants a route that needs neither. The `no cover` arm
+    below is the one that would catch somebody "simplifying" the two into
+    one.
+
+    **And it is one entry, not one per enemy.** The page says a single
+    Bluff check opposes every target at once, so offering one per enemy
+    would let a creature divert against each in turn for a standard action
+    each. The arm counting the offers holds that.
+
+    `f1270` rides it: *"You can use Bluff to gain combat advantage or
+    create a diversion to hide for one ally who has this feat and is
+    within 5 squares of you, instead of for yourself."* That is one
+    sentence covering both printed actions, so it is one key --
+    `actions.BLUFF_FOR_ALLY` -- and the row's two symbols were one gap
+    seen twice.
+
+    The checks are made deterministic by staging a large skill bonus rather
+    than by seeding: an opposed check against a passive number is a
+    comparison, so a +50 makes the success certain without teaching this
+    rule anything about the dice.
+    """
+    from combat_engine.engine import actions, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.resolve import _mods
+    from combat_engine.engine.types import ActionType, Relation
+
+    _posed = _board
+
+    # ---- the offer -----------------------------------------------------
+    world, me, _ev = _posed("f1270", 1)
+    enc = world.encounter
+    offers = [a for a in actions.legal(world, enc, me)
+              if a.kind == "diversion"]
+    out.that(len(offers) == 1,
+             "the action is offered exactly ONCE, with every watcher as its"
+             " targets -- the page opposes them all with a single Bluff"
+             " check, so one entry per enemy would let a creature divert"
+             " against each for a standard action each",
+             f"{len(offers)} offer(s)")
+    if not offers:
+        return
+    out.that(offers[0].cost is ActionType.STANDARD,
+             "and it costs a STANDARD action, which is what the page"
+             " charges and what makes it a real choice",
+             f"{offers[0].cost}")
+    seen = set(offers[0].targets)
+    out.that(seen and seen <= set(query.enemies(world, me)),
+             "and its targets are enemies that can see the actor -- *'the"
+             " target must be able to see the creature creating the"
+             " diversion'*, which is a fact about the watcher",
+             f"{sorted(seen)}")
+
+    # ---- it does not need cover, which _hiding does --------------------
+    hides = [a for a in actions.legal(world, enc, me) if a.kind == "hide"]
+    out.that(not hides,
+             "and on this board the minor-action HIDE is not offered at"
+             " all -- no superior cover and no total concealment. So the"
+             " diversion is reachable where hiding is not, which is the"
+             " printed point of it and the arm that catches the two being"
+             " collapsed into one",
+             f"{len(hides)} hide offer(s)")
+
+    # ---- performing it -------------------------------------------------
+    c = Cast(world=world, me=me, ref="probe")
+    c.bonus("skill:bluff", 50, on=me, until=When.ENCOUNTER)
+    c.bonus("skill:stealth", 50, on=me, until=When.ENCOUNTER)
+    actions.perform(world, enc, me, offers[0])
+
+    known = world.get(me, Powers)
+    out.that(known is not None
+             and known.charges.get(actions.DIVERSION_USE, 0) == 1,
+             "taking it spends the once-per-encounter charge -- and spends"
+             " it whether or not it lands, which is what *'can take this"
+             " action only once per encounter'* says about the action"
+             " rather than about the outcome",
+             f"{known.charges.get(actions.DIVERSION_USE, 0) if known else '?'}")
+
+    hidden = {
+        t for t in seen
+        if me in world.relations.sources(Relation.HIDDEN_FROM, t)
+        or t in world.relations.targets(Relation.HIDDEN_FROM, me)
+    }
+    out.that(bool(hidden),
+             "and with the checks staged to succeed the actor is HIDDEN"
+             " from the watchers it fooled -- the printed Success, and the"
+             " whole of what the action buys",
+             f"hidden from {sorted(hidden)}")
+
+    out.that(not actions.legal(world, enc, me)
+             or not [a for a in actions.legal(world, enc, me)
+                     if a.kind == "diversion"],
+             "and it is not offered a second time -- once per encounter",
+             "gone")
+
+    # ---- f1270's beneficiary, asked of the chooser's OPTIONS -----------
+    # **Read what the choice is handed, not what it returns.** Who wins a
+    # `choose` is `World.decide`'s business and this rule must not depend
+    # on how it breaks a tie -- the card grants an *option*, so what is
+    # testable is that the eligible allies are on the list and the
+    # ineligible ones are not.
+    class _Offered:
+        def __init__(self) -> None:
+            self.seen: list[int] = []
+
+        def choose(self, options: list[int], _why: str = "") -> int:
+            self.seen = list(options)
+            return options[0]
+
+    world2, me2, _e2 = _posed("f1270", 2)
+    mates = sorted(a for a in query.allies(world2, me2) if a != me2)
+    out.that(bool(mates), "premise: the board fields an ally", f"{mates}")
+    if not mates:
+        return
+    mate = mates[0]
+
+    # **The key is already on the actor and must not be laid again.** The
+    # board arms the row under test, so `f1270`'s own body has already put
+    # `BLUFF_FOR_ALLY` there -- an earlier draft of this rule laid a second
+    # 5 on top and `Mods.total` summed them to **10**, which quietly made
+    # the nine-square arm pass. `audit.board` pre-setting the number you
+    # are about to measure is a documented trap and this is it.
+    reach = _mods(world2, me2, actions.BLUFF_FOR_ALLY, {})
+    out.that(reach == 5,
+             "premise: the armed feat has put the printed 5-square radius"
+             " on the actor, and this rule reads it rather than laying one",
+             f"{reach}")
+
+    out.that(actions._bluff_beneficiary(world2, mate, _Offered()) == mate,
+             "a creature WITHOUT the feat keeps the benefit and is offered"
+             " no choice -- read of an ally on this very board, so every"
+             " creature in the game that lacks the feat keeps exactly"
+             " today's behaviour",
+             "itself")
+
+    spy2 = _Offered()
+    actions._bluff_beneficiary(world2, me2, spy2)
+    out.that(spy2.seen == [],
+             "and with the key on the actor alone, no ally is eligible and"
+             " NO choice is offered -- *'one ally who has this feat'*, read"
+             " as an ally carrying the same key, which is how the engine"
+             " avoids naming a feat",
+             f"offered {spy2.seen}")
+
+    seat = world2.need(me2, Position).square
+    probe = Cast(world=world2, me=me2, ref="probe")
+    probe.bonus(actions.BLUFF_FOR_ALLY, 5, on=mate, until=When.ENCOUNTER)
+
+    # Lift, set, place: `Grid.place` only adds and `distance_between`
+    # reads the occupancy index, so setting `Position.square` alone leaves
+    # the ally measured from where it used to stand.
+    def stand(who: int, sq: tuple[int, int]) -> None:
+        world2.grid.lift(who)
+        world2.need(who, Position).square = sq
+        world2.grid.place(who, frozenset({sq}))
+
+    stand(mate, (seat[0] + 1, seat[1]))
+    spy3 = _Offered()
+    actions._bluff_beneficiary(world2, me2, spy3)
+    out.that(spy3.seen == [me2, mate],
+             "once the ally carries it too, BOTH are offered -- the actor"
+             " included, because the card grants an option and 'instead of"
+             " for yourself' is a choice rather than a redirection",
+             f"offered {spy3.seen}")
+
+    stand(mate, (seat[0] + 9, seat[1]))
+    spy4 = _Offered()
+    actions._bluff_beneficiary(world2, me2, spy4)
+    out.that(spy4.seen == [],
+             "and an ally beyond the printed 5 squares drops off, leaving"
+             " no choice at all -- the radius lives in the key's value, so"
+             " the engine reads a distance rather than carrying one",
+             f"offered {spy4.seen} at"
+             f" {query.distance_between(world2, me2, mate)} squares")
+
+
 def a_granted_beast_keyword_is_seen_by_the_reader(out: Result) -> None:
     """`f2880`'s last clause: *treat it as though it has the keyword*, which
     has to reach the package's riders and not only the refusal.
@@ -143331,6 +143554,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "bluff_diversion": (
+        creating_a_diversion_hides_you_and_may_hide_an_ally,
+        "CREATE A DIVERSION TO HIDE is a printed action the engine did"
+        " not offer, and f1270 rides it for an ally",
     ),
     "granted_beast_keyword": (
         a_granted_beast_keyword_is_seen_by_the_reader,

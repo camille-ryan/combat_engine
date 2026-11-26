@@ -147,6 +147,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.actions import BLUFF_FOR_ALLY
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.query import (
     allies,
@@ -645,8 +646,7 @@ def f1259(c: Cast) -> None:
     c.use_power("p1449")
 
 
-@_trait("f1270", dropped=("actions.feint(for_ally=)",
-                          "actions.bluff_to_hide()"))
+@_trait("f1270")
 def f1270(c: Cast) -> None:
     """The skill bonus is written; handing the benefit to an ally is not.
 
@@ -665,14 +665,37 @@ def f1270(c: Cast) -> None:
     feint, by the hide check's opposition and by anything else that rolls
     the skill. `kind="feat"` is the word the card prints.
 
-    **What is left is the beneficiary, and that is two different gaps.**
-    The feint lays its advantage with `on=actor` inside `actions.execute`
-    and nothing reaches in, so "instead of for yourself" has no channel --
-    which is `actions.feint(for_ally=)`. And the card's second use,
-    bluffing to create a diversion and hide, is not an action at all:
-    `actions._hiding` is a minor action gated on superior cover or total
-    concealment and opposed by passive Perception, with no Bluff route in
-    or out of it. Two symbols because either could land without the other.
+    **Both of those landed, and they turned out to be one key and one
+    printed action.** The note here read: *"the feint lays its advantage
+    with `on=actor` inside `actions.execute` and nothing reaches in, so
+    'instead of for yourself' has no channel... And the card's second use,
+    bluffing to create a diversion and hide, is not an action at all."*
+    Both halves were exactly right about the state.
+
+    What it got wrong was "two symbols because either could land without
+    the other". The printed sentence is **one** sentence covering two
+    actions, so the beneficiary is one key -- `actions.BLUFF_FOR_ALLY`,
+    holding the printed radius -- read by both the feint's execute branch
+    and the diversion's.
+
+    And the second half was not a missing channel at all: **CREATE A
+    DIVERSION TO HIDE is a printed action the engine did not offer**, read
+    off the Bluff skill entry beside the feint. A standard action, once per
+    encounter, one Bluff check opposing every watcher's passive Insight at
+    once, then a Stealth check against the passive Perception of whoever
+    was fooled. `actions._diverting` is that, and it is a general rules gap
+    rather than anything this card needed -- any creature may do it.
+
+    `actions._hiding` is deliberately untouched: it gates on superior cover
+    or total concealment, which is the printed requirement for *becoming*
+    hidden, and the diversion is the printed route that needs neither. The
+    gate on the new action is being **seen**, which is the opposite
+    condition.
+
+    **"An ally who has this feat" is read as "an ally carrying the same
+    key"**, not as a ref. The engine must not name a feat, and it does not
+    have to: the card's own eligibility test is "holds the thing that
+    grants this".
 
     Neither of them is the ally pool. "An ally who has this feat and is
     within 5 squares" is `c.feat(c.ref, on=friend)` and
@@ -685,6 +708,13 @@ def f1270(c: Cast) -> None:
     meaning, and `narrative=` would claim the whole row plays.
     """
     c.bonus("skill:bluff", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+    # *"...for one ally who has this feat and is within 5 squares of you,
+    # instead of for yourself."* The 5 is the printed radius and lives in
+    # the value, so the engine reads a distance rather than carrying one.
+    # Untyped and not a `kind=`: it is a permission, not a bonus to
+    # anything, and giving it a type would make two holders of the same
+    # feat collide under the non-stacking rule.
+    c.bonus(BLUFF_FOR_ALLY, 5, on=c.me, until=When.ENCOUNTER)
 
 
 # -- the exotic weapon chains -----------------------------------------------

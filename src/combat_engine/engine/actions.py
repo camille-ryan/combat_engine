@@ -173,6 +173,7 @@ def legal(
     out.extend(_disabling(world, encounter, actor))
     out.extend(_readying(world, encounter, actor))
     out.extend(_feinting(world, encounter, actor))
+    out.extend(_diverting(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     # **An allowance keeps only the costs it names.** `query.can_act`
@@ -711,6 +712,134 @@ def spot_failed(victim: int) -> str:
 #: advantage" -- and without it that row fires on any successful Bluff check
 #: against anybody, which is wider than its printed line.
 FEINT_PURPOSE = "combat-advantage"
+
+#: Once per encounter, the same clock and for the same reason as
+#: `FEINT_USE`: *"CREATE A DIVERSION TO HIDE ... Action: Standard action. A
+#: creature can take this action only once per encounter."* Nothing declares
+#: the action, so there is no row whose `usage` could say it.
+DIVERSION_USE = "diversion:used"
+
+#: What the diversion's Bluff check is **for**, on `SkillCheck.purpose`,
+#: beside `FEINT_PURPOSE`. The two printed Bluff actions are different
+#: things and a card naming one must not read the other: `f946` pays on *"a
+#: successful Bluff check in combat to gain combat advantage"*, which is the
+#: feint and not this.
+DIVERSION_PURPOSE = "create-a-diversion"
+
+#: How far a printed Bluff action's benefit may be handed to an **ally**, in
+#: squares. `0` -- the default -- means it lands on whoever took the action.
+#:
+#: `f1270` is the one card: *"You can use Bluff to gain combat advantage or
+#: create a diversion to hide for one ally who has this feat and is within 5
+#: squares of you, instead of for yourself."* It carried two symbols,
+#: `actions.feint(for_ally=)` and `actions.bluff_to_hide()`, and this is one
+#: key because it is one printed sentence covering both actions.
+#:
+#: **"Who has this feat" is read as "carries this key", not as a ref.** The
+#: engine must not name a feat, and it does not have to: the card's
+#: eligibility test is exactly "holds the thing that grants this", so an
+#: ally carrying the key is an ally with the feat. That also means a second
+#: card granting the same ability would compose rather than needing a
+#: second list.
+BLUFF_FOR_ALLY = "bluff:for-ally"
+
+
+def _bluff_beneficiary(world: World, actor: int, cast: Any) -> int:
+    """Who a printed Bluff action's benefit lands on. The actor, normally.
+
+    `f1270`'s *"instead of for yourself"*. The actor is offered alongside
+    the eligible allies rather than replaced by them, because the card
+    grants an **option** -- a holder may still feint for itself, and which
+    is better is `policy/`'s business.
+
+    An ally qualifies by carrying `BLUFF_FOR_ALLY` itself, which is the
+    card's own "who has this feat", and by being within the radius the
+    key holds. Both are the holder's numbers rather than literals here, so
+    a card printing a different distance needs no change to this.
+    """
+    from .query import allies, distance_between
+    from .resolve import _mods
+
+    reach = _mods(world, actor, BLUFF_FOR_ALLY, {})
+    if reach <= 0:
+        return actor
+    pool = sorted(
+        a
+        for a in allies(world, actor)
+        if a != actor
+        and alive(world, a)
+        and distance_between(world, actor, a) <= reach
+        and _mods(world, a, BLUFF_FOR_ALLY, {}) > 0
+    )
+    if not pool:
+        return actor
+    picked = cast.choose([actor, *pool], "who gains the benefit of the bluff")
+    return picked if picked in (actor, *pool) else actor
+
+
+def _diverting(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """CREATE A DIVERSION TO HIDE, which the engine did not offer at all.
+
+    Printed in the Bluff skill entry beside the feint, read off the page
+    rather than remembered:
+
+        CREATE A DIVERSION TO HIDE
+        Make a Bluff check to create a diversion and become hidden using
+        the Stealth skill.
+        Action: Standard action. A creature can take this action only once
+                per encounter.
+        Opposed Check: Against a target's passive Insight. The target must
+                be able to see the creature creating the diversion. A
+                creature can make the check against multiple targets at
+                once, opposing the passive Insight of each target with a
+                single Bluff check.
+        Success: The creature can immediately make a Stealth check opposed
+                by the passive Perception of any target that failed the
+                opposed Bluff check. If the Stealth check succeeds against
+                a target, the creature becomes hidden from that target
+                until the end of the current turn or until immediately
+                after the hidden creature makes an attack.
+
+    **One entry, not one per enemy**, which is where this differs from the
+    feint beside it: the page says a single Bluff check opposes every
+    target at once, so the targets are the whole visible set and the menu
+    has one item. Offering one per enemy would have let a creature divert
+    against each in turn for one standard action each, which is not what
+    the page grants.
+
+    **The diversion is what replaces cover**, which is the whole reason
+    this is a separate action from `_hiding`. That one gates on superior
+    cover or total concealment -- the printed requirement for *becoming*
+    hidden -- and this page grants a route that needs neither, at the price
+    of a standard action and a once-per-encounter limit. So the gate here
+    is being *seen*, which is the opposite condition, and `_hiding`'s
+    threshold is deliberately not consulted.
+
+    Sight is asked of the **target**, through that creature's own
+    `Cast.can_see`: *"the target must be able to see the creature creating
+    the diversion"*, which is a fact about the watcher and not about the
+    actor.
+    """
+    from .cast import Cast
+    from .components import Powers
+    from .query import enemies
+
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return []
+    known = world.get(actor, Powers)
+    if known is not None and known.charges.get(DIVERSION_USE, 0):
+        return []
+    watching = tuple(
+        foe
+        for foe in sorted(enemies(world, actor))
+        if alive(world, foe)
+        and Cast(world=world, me=foe, ref="diversion").can_see(actor)
+    )
+    if not watching:
+        return []
+    return [
+        Action(kind="diversion", cost=ActionType.STANDARD, targets=watching)
+    ]
 
 
 def _searching(world: World, encounter: Encounter, actor: int) -> list[Action]:
@@ -3986,6 +4115,59 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         world.relations.clear(Relation.HIDDEN_FROM, quarry, actor, "spotted")
         return True
 
+    if action.kind == "diversion":
+        from .cast import Cast
+        from .components import Powers as _Powers
+        from .skills import check as _check
+
+        victims = [t for t in action.targets if alive(world, t)]
+        if not victims:
+            return False
+        cast = Cast(world=world, me=actor, ref="diversion")
+        # Spent whether or not it lands, like the feint beside it: "only
+        # once per encounter" is about taking the action.
+        known = world.get(actor, _Powers) or world.add(actor, _Powers())
+        known.charges[DIVERSION_USE] = 1
+        # **One Bluff check against every watcher**, which the page states
+        # outright: *"A creature can make the check against multiple
+        # targets at once, opposing the passive Insight of each target with
+        # a single Bluff check."* So the roll happens once and is compared
+        # per target, which is why `CheckResult.total` is read rather than
+        # the check being made per victim.
+        #
+        # `dc=` is the easiest watcher, so the announced success means "it
+        # fooled at least one". Per-target resolution is the comparison
+        # below; the dc is here so a row answering `SkillCheck` sees a
+        # number that means something rather than 0.
+        insight = {t: cast.passive("insight", of=t) for t in victims}
+        bluff = _check(world, actor, "bluff", dc=min(insight.values()),
+                       purpose=DIVERSION_PURPOSE)
+        # `>=`, which is what `skills.check` itself does with a `dc`:
+        # `ev.success = ev.dc <= 0 or ev.total >= ev.dc`.
+        fooled = [t for t in victims if bluff.total >= insight[t]]
+        if not fooled:
+            return True
+        # **Who hides is the beneficiary**, `f1270`'s *"create a diversion
+        # to hide for one ally ... instead of for yourself"*. The Bluff is
+        # the actor's -- it is the actor making the diversion -- and the
+        # Stealth is the hider's, which is the reading the printed sentence
+        # gives: the ally is the one becoming hidden.
+        hider = _bluff_beneficiary(world, actor, cast)
+        sneaking = Cast(world=world, me=hider, ref="diversion")
+        perception = {t: sneaking.passive("perception", of=t) for t in fooled}
+        stealth = _check(world, hider, "stealth",
+                         dc=min(perception.values()),
+                         purpose=DIVERSION_PURPOSE)
+        for t in fooled:
+            if stealth.total >= perception[t]:
+                # **Until the end of the current turn**, which is the
+                # printed duration; the other printed limb -- "until
+                # immediately after the hidden creature makes an attack" --
+                # is `resolve.attack` breaking it for whoever swung, which
+                # `Cast.hide` already relies on.
+                sneaking.hide(from_=t, until=When.EOT)
+        return True
+
     if action.kind == "feint":
         # `_Powers` is aliased: a later branch of this same function imports
         # `Powers` too, and a bare name assigned in one branch makes it local
@@ -4026,9 +4208,16 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # "commonest single mistake", committed here in engine code.
         # Measured before the fix: the Bluff check succeeded on three of
         # nine seeds and `has_combat_advantage` was False on all nine.
+        # **The benefit may go to an ally instead**, which is `f1270`'s
+        # *"instead of for yourself"*. `_bluff_beneficiary` answers the
+        # actor unless the holder carries `BLUFF_FOR_ALLY` and an eligible
+        # ally is picked -- so every creature without the feat keeps
+        # today's behaviour exactly.
+        gains = _bluff_beneficiary(world, actor, cast)
         cast.gains_advantage(
             lambda ctx: ctx.get("target") == victim,
-            until=When.EONT, on=actor,
+            on=gains,
+            until=When.EONT,
         )
         return True
 
