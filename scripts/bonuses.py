@@ -214,8 +214,43 @@ BORROWED = {
 #: offset `concealment` would be wrong in the way this comment's delta case
 #: already describes -- two of a kind do not stack, so it would collide
 #: with any real concealment bonus and the larger would win.
-ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5", "m2354a4",
-             "i3382p1", "cf:rogue-scoundrel-f1s2"}
+#: **An eighth, and it is the "is this a printed bonus at all" shape in its
+#: purest form: the call is not a number on any roll.** `f1270` prints *"a
+#: +2 feat bonus to Bluff checks"* -- written, typed `kind="feat"`,
+#: correct -- and separately *"you can use Bluff to gain combat advantage
+#: or create a diversion to hide for one ally who has this feat and is
+#: within 5 squares of you"*. That second sentence is a **permission**, and
+#: the row carries it as `c.bonus(actions.BLUFF_FOR_ALLY, 5)`: the 5 is the
+#: printed radius, read by `actions._bluff_beneficiary` as a distance.
+#:
+#: `Mods` is the only per-creature store the engine reads this way, and
+#: `c.bonus` is its door -- so a permission and a bonus are written with
+#: the same verb and this checker cannot tell them apart by shape. Typing
+#: it `feat` would be wrong twice over: it names a radius rather than a
+#: bonus, and two holders of the same feat standing together would collide
+#: under the non-stacking rule, so the second holder's permission would
+#: vanish.
+#:
+#: Worth distinguishing from the seven above because the others are all
+#: *numbers on something* -- a rider on damage, a delta, an offset. This
+#: one is not a number on anything, which is the first time that shape has
+#: appeared here and is the clearest argument yet for the per-sentence read
+#: this comment keeps asking for.
+#:
+#: **And the cost this comment states for naming a row is smaller than it
+#: says.** It reads *"the cost of naming them... is that each waived row's
+#: correct typed call stops being checked too"*. Measured on `f1270`, by
+#: planting it: changing its real `kind="feat"` to `kind="item"` is still
+#: reported WRONG with the waiver in place. So membership here suppresses
+#: the **omitted-type** direction only, and the wrong-type direction goes
+#: on being checked for every waived row.
+#:
+#: That matters for how freely this set may be used: the blind spot is one
+#: direction, not the row. Said with a plant behind it rather than
+#: reasoned, because the sentence above had been read as a reason to avoid
+#: the set.
+ELSEWHERE = {"f1270", "f1766b", "f2913", "m915a4", "m970a3", "m2079a5",
+             "m2354a4", "i3382p1", "cf:rogue-scoundrel-f1s2"}
 
 #: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
 #: The same word after "the" or "equal to the" is an *amount* being
