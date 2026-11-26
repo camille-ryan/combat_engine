@@ -42,6 +42,48 @@ TRIGGERED = Trigger(Hit, by_me, HIT_ON_MY_TURN)
 FLURRIES = ("p7448", "p11207", "p13123", "p16131", "p16132")
 
 
+#: The label prefix under which a flurry use records **which attack
+#: triggered it**, held on `Powers.latched` for the turn.
+#:
+#: `i724x1` is the one reader and the printed clause is why it exists:
+#: *"you can use your flurry of blows power an additional time during your
+#: turn, but the two uses of that power must be triggered by two different
+#: attacks that you make with this <ki focus>"*. The second use is bought
+#: by that item handing a use back, and the restriction is about the
+#: **attacks**, not about the hand-backs -- so the item has to be able to
+#: ask "did a flurry use this turn already come off *this* attack".
+#:
+#: `Hit.use` is the attack identity that makes it answerable: a close
+#: burst hitting four creatures is four `Hit` events and **one** `use`,
+#: which is exactly the case the card's "two different attacks" rules out.
+#: It is `repr=False`, so none of this reaches a fixture.
+#:
+#: Recorded here, where the flurry is used, rather than in the item: the
+#: item sees only the hit it is answering and cannot know what triggered
+#: the *first* use. `i724x1`'s own note reached that conclusion -- *"that
+#: gate belongs where the flurry is used"* -- after a plant showed the
+#: obvious version of it unreachable.
+FLURRY_FROM = "flurry:from:"
+
+
+def remember_the_trigger(c: Cast) -> None:
+    """Record which attack triggered this use of the flurry.
+
+    Called by all five bodies. A latch rather than a field because the
+    answer is only wanted for the current turn and `per_turn=True` is
+    exactly that window -- and because the value rides in the **label**,
+    which keeps it on `Powers` where a row's store belongs rather than in
+    a module-level dict keyed on the world.
+
+    Silent when the trigger carries no identity: a flurry used from
+    something other than a hit has no attack to be distinct from, and
+    recording `0` would make two such uses look like the same attack.
+    """
+    aid = int(getattr(c.trigger, "use", 0) or 0)
+    if aid:
+        c.latch(f"{FLURRY_FROM}{aid}", per_turn=True)
+
+
 def _tier(level: int) -> int:
     return 0 if level < 11 else (1 if level < 21 else 2)
 
@@ -232,6 +274,7 @@ def _burn_instead(c: Cast, amount: int,
     on=TRIGGERED,
 )
 def p11207(c: Cast) -> None:
+    remember_the_trigger(c)
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
@@ -272,6 +315,7 @@ def p13123(c: Cast) -> None:
     triggering attack" -- so it is gated on the triggering event's own
     target rather than applied to every creature this row touches.
     """
+    remember_the_trigger(c)
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
@@ -313,6 +357,7 @@ def p16131(c: Cast) -> None:
     """"Any attack that includes you as a target" is a gate on the attack
     context, which carries `target` -- it is the damage context that does
     not."""
+    remember_the_trigger(c)
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
@@ -340,6 +385,7 @@ def p16131(c: Cast) -> None:
     on=TRIGGERED,
 )
 def p16132(c: Cast) -> None:
+    remember_the_trigger(c)
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
@@ -368,6 +414,7 @@ def p7448(c: Cast) -> None:
     """A creature the attack hit is already adjacent, so "slide it to a
     square adjacent to you" and "slide it 1 square" come to the same move
     at this reach; the decider picks either way."""
+    remember_the_trigger(c)
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):

@@ -138302,6 +138302,148 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def two_flurry_uses_need_two_different_attacks(out: Result) -> None:
+    """*"You can use your Flurry of Blows power an additional time during
+    your turn, but the two uses of that power must be triggered by two
+    different attacks that you make with this <ki focus>."* -- `i724x1`.
+
+    **The hand-back was already written; the distinctness was not**, and
+    the row's note had been re-pointed twice before arriving at the right
+    moment. `c.restore_use(once_per_round=)` clears the round mark
+    `dsl.usable` refuses on, which is the "additional time". What nothing
+    could say was *which attack* bought each use.
+
+    `Hit.use` is the identity that makes it answerable -- a close burst
+    hitting four creatures is four `Hit` events and **one** `use`, which
+    is exactly the case the printed clause rules out -- and
+    `monk.level_0.remember_the_trigger` records it where the flurry is
+    *used*, because this item sees only the hit it is answering and
+    cannot know what triggered the first use.
+
+    **An earlier attempt gated the wrong thing and a plant proved it.** It
+    remembered which attack bought the *hand-back* and refused a second
+    from the same one; emptying that bookkeeping left the rule green,
+    because the per-turn latch already refuses a second hand-back outright.
+    The arms below are on the attack that triggered the **use**.
+
+    Driven on a monk's own board rather than the item's: `audit.board`
+    poses no monk for `i724x1`, so `c.flurry_of_blows()` is `""` there and
+    the body returns on its second line. A board posed for the flurry row
+    has the monk, the flurry and a weapon in hand, which is everything
+    `c.struck_with` needs.
+    """
+    from combat_engine.content.powers.monk.level_0 import (
+        FLURRIES,
+        FLURRY_FROM,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.events import Hit
+
+    ITEM, FLURRY = "i724x1", "p11207"
+    world, me, _ev = _board(FLURRY, 1)
+
+    out.that(not REGISTRY[ITEM].unfinished,
+             "the item carries no marker, where it was"
+             " `dropped=('c.flurry_of_blows(distinct_attacks=)',)`",
+             f"{REGISTRY[ITEM].unfinished}")
+
+    c = Cast(world=world, me=me, ref=ITEM)
+    out.that(c.flurry_of_blows() == FLURRY,
+             "premise: the board's monk holds this flurry, so the item's"
+             " body gets past its second line -- which it cannot do on"
+             " `audit.board(i724x1)` at all",
+             f"{c.flurry_of_blows()}")
+    out.that(c.struck_with(Hit(attacker=me, target=me, power=FLURRY, critical=False)) is not None,
+             "and something is in its hand, which is all `c.struck_with`"
+             " asks",
+             "armed")
+
+    REGISTRY[ITEM].body(c)
+    known = world.get(me, Powers) or world.add(me, Powers())
+
+    def spent() -> bool:
+        """Is the flurry refused for the round?"""
+        return not usable(world, me, REGISTRY[FLURRY])[0]
+
+    # The flurry has been used this round, off attack 7.
+    known.note_round(FLURRY, world.round)
+    out.that(spent(),
+             "premise: the flurry is refused once used this round -- the"
+             " budget the hand-back exists to clear",
+             "refused")
+    # **The record comes from the flurry's own body, not from this rule.**
+    # An earlier draft latched it by hand here, and the plant that stops
+    # `remember_the_trigger` recording anything stayed green -- the rule
+    # was testing the item's gate against its own staging. Running the
+    # body is what ties the two halves together.
+    flurry_cast = Cast(world=world, me=me, ref=FLURRY)
+    flurry_cast.trigger = Hit(attacker=me, target=me, power=FLURRY,
+                              critical=False, use=7)
+    REGISTRY[FLURRY].body(flurry_cast)
+    out.that(c.latched(f"{FLURRY_FROM}7", per_turn=True),
+             "using the flurry RECORDS which attack triggered it -- all"
+             " five flurry bodies call `remember_the_trigger`, and without"
+             " that the item has nothing to compare against",
+             "recorded")
+    out.that(not c.latched(f"{FLURRY_FROM}8", per_turn=True),
+             "and records only that attack, not every id -- the negative"
+             " control for the record itself",
+             "only the one")
+
+    # **Every one of the five, not just the one this board poses.** A monk
+    # holds whichever flurry its tradition granted, so the item is right
+    # for a fifth of them unless all five record. Probed: deleting the
+    # call from `p7448` alone reddened **nothing** while this arm was
+    # absent, which is the one-member-speaks-for-five hole.
+    missing = []
+    for ref in FLURRIES:
+        try:
+            w2, who, _e = _board(ref, 1)
+        except Exception:
+            missing.append(f"{ref}(no board)")
+            continue
+        shot = Cast(world=w2, me=who, ref=ref)
+        shot.trigger = Hit(attacker=who, target=who, power=ref,
+                           critical=False, use=11)
+        REGISTRY[ref].body(shot)
+        if not Cast(world=w2, me=who, ref=ITEM).latched(
+                f"{FLURRY_FROM}11", per_turn=True):
+            missing.append(ref)
+    out.that(not missing,
+             "and ALL FIVE flurries record it -- a monk holds whichever one"
+             " its tradition granted, so four of five recording would make"
+             " the item right for a fifth of the monks who own it",
+             f"{missing or 'all five'}")
+
+    # A hit from the SAME attack must not buy the extra use.
+    world.bus.emit(Hit(attacker=me, target=me, power=FLURRY, critical=False, use=7))
+    out.that(spent(),
+             "a hit from the SAME attack that triggered the first use buys"
+             " NOTHING -- *'two different attacks'*, and this is the arm"
+             " the whole clause comes to",
+             "still refused")
+
+    # A hit from a different attack must.
+    world.bus.emit(Hit(attacker=me, target=me, power=FLURRY, critical=False, use=8))
+    out.that(not spent(),
+             "while a hit from a DIFFERENT attack hands the use back --"
+             " the 'additional time during your turn', which was already"
+             " working and must not be broken by the new gate",
+             "allowed again")
+
+    # ---- and only once a turn ------------------------------------------
+    known.note_round(FLURRY, world.round)
+    out.that(spent(), "premise: used again", "refused")
+    world.bus.emit(Hit(attacker=me, target=me, power=FLURRY, critical=False, use=9))
+    out.that(spent(),
+             "and a third attack buys nothing more -- *'an additional"
+             " time'* is one extra use, held by the per-turn latch, which"
+             " the distinctness gate must not loosen",
+             "still refused")
+
+
 def creating_a_diversion_hides_you_and_may_hide_an_ally(out: Result) -> None:
     """CREATE A DIVERSION TO HIDE, a printed action the engine did not offer.
 
@@ -143554,6 +143696,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "flurry_distinct": (
+        two_flurry_uses_need_two_different_attacks,
+        "i724x1's extra flurry use needs a DIFFERENT attack, read off"
+        " Hit.use where the flurry is used (#1566)",
     ),
     "bluff_diversion": (
         creating_a_diversion_hides_you_and_may_hide_an_ally,

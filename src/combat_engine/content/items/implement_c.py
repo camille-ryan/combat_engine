@@ -58,6 +58,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.monk.level_0 import FLURRY_FROM
 from combat_engine.content.powers.paladin.marks import SANCTIONS
 from combat_engine.engine import (
     AC,
@@ -632,7 +633,6 @@ def i704x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.flurry_of_blows(distinct_attacks=)",),
 )
 def i724x1(c: Cast) -> None:
     """**Re-pointed, and the old note's premise was wrong.** It said this
@@ -721,6 +721,24 @@ def i724x1(c: Cast) -> None:
             return
         flurry = c.flurry_of_blows()
         if not flurry or c.latched(f"{c.ref} again", per_turn=True):
+            return
+        # **The printed distinctness, and it reads the ATTACK rather than
+        # the hit.** *"The two uses of that power must be triggered by two
+        # different attacks that you make with this <ki focus>."*
+        # `Hit.use` is the attack identity -- a close burst hitting four
+        # creatures is four `Hit` events and one `use` -- so a hand-back
+        # bought by the very attack that already triggered a flurry this
+        # turn is refused, and the two uses cannot share one attack.
+        #
+        # Recorded where the flurry is *used*, by
+        # `monk.level_0.remember_the_trigger`, because this handler sees
+        # only the hit it is answering and cannot know what triggered the
+        # first use. An earlier attempt gated on which attack bought the
+        # hand-back instead and a plant showed it unreachable: the
+        # per-turn latch above already refuses a second hand-back, so
+        # nothing ever reached the comparison.
+        aid = int(getattr(ev, "use", 0) or 0)
+        if aid and c.latched(f"{FLURRY_FROM}{aid}", per_turn=True):
             return
         if c.restore_use(flurry, on=me, once_per_round=True):
             c.latch(f"{c.ref} again", per_turn=True)
