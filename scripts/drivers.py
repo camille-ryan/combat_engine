@@ -138236,6 +138236,173 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def a_floating_object_is_placed_and_swapped_with_but_never_occupies(
+    out: Result,
+) -> None:
+    """`i3221p1` puts an object on the board and `i3221p2` teleports into it.
+
+    **Camille took `out_of_combat=True` off `i3221p1`** on `#1597`,
+    2026-11-25: *"The item in particular looks like the at will has combat
+    applications. It's possible to need to use thievery to disarm a trap
+    mid combat."* The row's body was **empty** before that, so un-flagging
+    alone would have put a do-nothing row in the action menu -- which is
+    what this rule's first arm is really guarding.
+
+    Three things here are silent if wrong, and each has an arm:
+
+    * **nothing announced a placement.** `World.spawn` emits nothing, so a
+      row whose whole Effect is "you put a thing down" audits SILENT while
+      working perfectly -- the argument `Summoned` already carries for a
+      creature. `ObjectPlaced` is the fix and the arm reads it off the bus.
+    * **the object must not occupy its square**, printed, and it is
+      re-asserted *after* the swap for a reason: `terrain.put(solid=False)`
+      sets `Position.square` without indexing `grid.occupants`, and
+      `c.swap` routes through `movement.step`, which places. Without the
+      re-lift the object becomes solid on the first swap and the printed
+      line is false from then on, with nothing to notice.
+    * **the swap is a teleport**, which is the whole of what the engine
+      change bought. `c.swap` hard-coded `kind="swap"`, so the move went
+      down as a walk and anything watching for a teleport missed it.
+
+    The `_floating` arms are the other half: matched on the ident **and**
+    `Scenery.by`, so a second wearer's object in the same room is not
+    found, and a second use does not place a second one.
+    """
+    from combat_engine.content.items.hands import _floating
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Scenery
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Moved, ObjectPlaced
+    from combat_engine.engine.types import ActionType
+
+    PLACE, SWAP = "i3221p1", "i3221p2"
+    world, me, _ev = _board(PLACE, 1)
+
+    out.that(not REGISTRY[PLACE].out_of_combat,
+             "the placing row is NOT out_of_combat -- Camille's ruling on"
+             " #1597, and the premise of every arm below: a flagged row is"
+             " skipped by `actions.legal` outright",
+             f"{REGISTRY[PLACE].out_of_combat}")
+    out.that(not REGISTRY[SWAP].unfinished,
+             "and the row that depends on it carries no marker -- it was"
+             " `todo=('c.floating_object()',)` and the facility turned out"
+             " to be `content.terrain.put`, which already existed",
+             f"{REGISTRY[SWAP].unfinished}")
+
+    mark = len(world.bus.log)
+    c = Cast(world=world, me=me, ref=PLACE)
+    REGISTRY[PLACE].body(c)
+
+    thing = _floating(world, me)
+    out.that(thing is not None,
+             "the row places an object and `_floating` finds it -- the body"
+             " was EMPTY before this, so un-flagging alone would have put a"
+             " do-nothing row in the action menu",
+             f"{thing}")
+    if thing is None:
+        return
+
+    said = [e for e in world.bus.log[mark:] if isinstance(e, ObjectPlaced)]
+    out.that(len(said) == 1 and said[0].thing == thing,
+             "the placement is ANNOUNCED exactly once -- `World.spawn`"
+             " emits nothing, so without this the row audits SILENT while"
+             " working, which is `Summoned`'s own argument for a creature",
+             f"{len(said)}")
+    out.that(bool(said) and said[0].by == me,
+             "and the event says who placed it, so 'when you place one of"
+             " these' is askable rather than inferred from the square",
+             f"{said[0].by if said else None}")
+
+    where = world.need(thing, Position).square
+    out.that(not world.grid.squares_of(thing),
+             "the object does NOT occupy its square -- printed, and the"
+             " default is the opposite: an object placed solid blocks the"
+             " square it floats in. Asked of the OBJECT's index entry, not"
+             " of whether the square is empty -- the first draft asked the"
+             " latter and failed on a square a foe was standing in, which"
+             " is a placement the card allows",
+             f"{sorted(world.grid.squares_of(thing))}")
+    out.that(query.adjacent(world, me, thing),
+             "it floats in a square ADJACENT to the wearer, which is the"
+             " only placement the card allows",
+             f"{where} vs {sorted(query.squares(world, me))}")
+
+    # ---- one object, not two -------------------------------------------
+    REGISTRY[PLACE].body(Cast(world=world, me=me, ref=PLACE))
+    both = [
+        obj for obj in query.scenery(world)
+        if (sc := world.get(obj, Scenery)) is not None and sc.by == me
+    ]
+    out.that(len(both) == 1,
+             "a second use places NO second object -- 'one of the"
+             " gauntlets', and two would give `_floating` an arbitrary"
+             " answer for the row that swaps with it",
+             f"{len(both)}")
+
+    # ---- it is this wearer's, not anyone's -----------------------------
+    other = world.spawn(Position(square=(1, 1)))
+    out.that(_floating(world, other) is None,
+             "another creature does not find this wearer's object --"
+             " matched on `Scenery.by` as well as the ident, so a second"
+             " wearer in the same room cannot teleport into yours",
+             f"{_floating(world, other)}")
+
+    # ---- the daily: a teleport that exchanges squares -------------------
+    stood = sorted(query.squares(world, me))[0]
+    before = len(world.bus.log)
+    s = Cast(world=world, me=me, ref=SWAP)
+    REGISTRY[SWAP].body(s)
+
+    out.that(sorted(query.squares(world, me))[0] == where,
+             "the wearer ends up where the object was -- the 'swapping"
+             " positions' half",
+             f"{sorted(query.squares(world, me))[0]} wanted {where}")
+    out.that(world.need(thing, Position).square == stood,
+             "and the object ends up where the wearer was, so it is an"
+             " exchange rather than a one-way teleport",
+             f"{world.need(thing, Position).square} wanted {stood}")
+
+    hops = [e for e in world.bus.log[before:] if isinstance(e, Moved)]
+    out.that(bool(hops) and all(e.kind_ == "teleport" for e in hops),
+             "and every step of it is a TELEPORT, not a walk -- the whole"
+             " of what `c.swap(kind=)` bought, since the card prints"
+             " 'you teleport' and the keyword is on the header",
+             f"{[e.kind_ for e in hops]}")
+    out.that(not world.grid.squares_of(thing),
+             "the object STILL does not occupy its square after the swap --"
+             " `movement.step` places, so without the re-lift it turns"
+             " solid here and the printed line is false from now on",
+             f"{sorted(world.grid.squares_of(thing))}")
+
+    # ---- the requirement, both ways ------------------------------------
+    world2, me2, _ev2 = _board(PLACE, 2)
+    need = REGISTRY[SWAP].requires
+    out.that(need is not None and not need(world2, me2),
+             "with nothing floating the daily is REFUSED -- 'one of the"
+             " gauntlets must be floating' is a real `requires=` reading"
+             " the board, not prose",
+             f"{need}")
+    REGISTRY[PLACE].body(Cast(world=world2, me=me2, ref=PLACE))
+    out.that(need is not None and need(world2, me2),
+             "and once one is floating it is allowed -- the negative"
+             " control above cannot pass by the requirement always being"
+             " False",
+             "offered")
+
+    # ---- the minor-action return ---------------------------------------
+    live = [
+        e for e in world2.effects.live.values()
+        if not e.ended and e.by == PLACE
+    ]
+    out.that(bool(live) and any(
+        e.drop_cost is ActionType.MINOR for e in live),
+             "the wearer can give it back for a MINOR action -- printed,"
+             " and it is `c.endable` on the effect that holds the object"
+             " rather than a second row",
+             f"{[e.drop_cost for e in live]}")
+
+
 def a_doubled_climb_meets_the_grant_and_not_the_mover(out: Result) -> None:
     """*"Climb at normal speed and double any climbing movement granted to
     you by powers"* -- `i839p1`, and the doubling meets the **grant**.
@@ -142275,6 +142442,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "floating_object": (
+        a_floating_object_is_placed_and_swapped_with_but_never_occupies,
+        "i3221p1 places an object that does not occupy its square and"
+        " i3221p2 teleports into it, Camille's ruling on #1597",
     ),
     "doubled_climb": (
         a_doubled_climb_meets_the_grant_and_not_the_mover,

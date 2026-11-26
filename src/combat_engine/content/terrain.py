@@ -36,7 +36,12 @@ from combat_engine.engine.components import (
     Trap,
 )
 from combat_engine.engine.durations import When
-from combat_engine.engine.events import EnterSquare, RoundStart, TurnStart
+from combat_engine.engine.events import (
+    EnterSquare,
+    ObjectPlaced,
+    RoundStart,
+    TurnStart,
+)
 from combat_engine.engine.grid import Square
 from combat_engine.engine.movement import place
 from combat_engine.engine.traps import suppressed
@@ -475,6 +480,17 @@ def put(world: World, square: Square, *, kind: str = "object",
         # indexing is what the index is for -- `Position.square` alone
         # leaves `squares_of` empty while the position names the square.
         world.need(eid, Position).square = square
+    # **Announced, because a spawn is otherwise invisible.** `Summoned`
+    # carries the same argument for a creature: nothing emits on
+    # `World.spawn`, so a row whose printed Effect is "you put a thing
+    # down" audits SILENT while working. Harmless to the room-dressing
+    # callers that predate this -- they run before any listener is armed --
+    # and it is what lets a row place one mid-fight and be seen doing it.
+    # #1594.
+    world.bus.emit(ObjectPlaced(
+        actor=by, thing=eid, square=square, thing_kind=kind, by=by,
+        ref=ref or f"scenery:{kind}",
+    ))
     return eid
 
 

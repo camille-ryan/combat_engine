@@ -1252,6 +1252,38 @@ class FamiliarMode(Event):
 
 
 @dataclass
+class ObjectPlaced(Event):
+    """A thing that is not a creature arrived on the board.
+
+    `Summoned` beside this says why one is needed at all: `World.spawn`
+    emits nothing, so a row whose whole printed Effect is "you put a thing
+    down" left no trace in the log and `audit.py` reported it SILENT.
+    `content.terrain.put` was the writer and announced nothing, which was
+    invisible while its only callers dressed a room **before** the fight.
+
+    **Not `Summoned`, deliberately.** That one says *a creature arrived*,
+    and every listener for "when a creature is summoned" would start
+    answering a crate. The two differ in what they put on the board, which
+    is the one thing a listener needs to tell apart.
+
+    `by` is the entity that placed it -- `0` for room dressing nobody cast
+    -- and `ref` is the row's, so "when you place one of these" is askable.
+
+    **`thing_kind`, not `kind`.** `Event` owns `kind` as the name the bus
+    and the save format identify an event by, and declaring a field of
+    that name raises at import -- which is how this was caught, rather
+    than by anything subtler. `Boosted.roll_kind` is the same dodge.
+    """
+
+    actor: int
+    thing: int
+    square: Square | None = None
+    thing_kind: str = ""
+    by: int = 0
+    ref: str = ""
+
+
+@dataclass
 class Summoned(Event):
     """A creature arrived on the board because a power put it there.
 

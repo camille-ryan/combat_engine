@@ -56,7 +56,7 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - Whoever is riding this creature.
 - `c.substitutions(self, ref: 'str' = '', *, of: 'int | None' = None) -> 'list[str]'`
   - Every clause substitution registered against a row, in menu order.
-- `c.swap(self, other: 'int', *, who: 'int | None' = None) -> 'bool'`
+- `c.swap(self, other: 'int', *, who: 'int | None' = None, kind: 'str' = 'swap') -> 'bool'`
   - Two creatures change places. Either both move or neither does.
 - `c.variant: int`
   - which variant of a substituted clause this use is -- `0` is the printed one. `c.instead_of` reads it; `Trigger._ask` offers them.

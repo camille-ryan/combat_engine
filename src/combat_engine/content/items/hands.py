@@ -59,6 +59,7 @@ from typing import Any
 from combat_engine.content.items.alchemical import ALCHEMICAL, of_category
 from combat_engine.content.powers.barbarian.rage import in_rage
 from combat_engine.content.powers.druid.forms import in_beast_form
+from combat_engine.content.terrain import put as _put_object
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -101,6 +102,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     SecondWind,
+    Size,
     SkillCheck,
     SurgeSpent,
     TempHP,
@@ -123,8 +125,13 @@ from combat_engine.engine import (
     query,
     targets_me,
 )
+from combat_engine.engine.components import Ident as _Ident
 from combat_engine.engine.components import Powers as _Powers
+from combat_engine.engine.components import Scenery as _Scenery
+from combat_engine.engine.grid import neighbours as _neighbours
 from combat_engine.engine.query import deals_damage
+from combat_engine.engine.query import scenery as _scenery
+from combat_engine.engine.query import squares as _squares_of
 
 ITEM = "item"
 
@@ -2120,16 +2127,146 @@ def i2732x1(c: Cast) -> None:
                    when=lambda ctx: bool(ctx.get("ranged")))
 
 
+#: The `Ident.ref` the placed object carries, so `i3221p2` can find the one
+#: *this* row put down rather than any object in the room. Prefixed, because
+#: a bare row ref in an `Ident` reads as a creature declared by that row.
+_FLOATING = "scenery:i3221p1"
+
+
+def _floating(world: World, eid: int) -> int | None:
+    """The object `i3221p1` put down for this wearer, if it is still out.
+
+    Matched on **both** the ident and `Scenery.by`, not either alone: the
+    ident alone would find a second wearer's object in the same room, and
+    `by` alone would find anything else this creature ever placed.
+    """
+    for obj in _scenery(world):
+        named = world.get(obj, _Ident)
+        thing = world.get(obj, _Scenery)
+        if named is None or thing is None:
+            continue
+        if named.ref == _FLOATING and thing.by == eid:
+            return obj
+    return None
+
+
 @power("i3221p1", level=9, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF,
+       dropped=("c.act_from(square)", "c.command_object(move=)"))
 def i3221p1(c: Cast) -> None:
-    """A hand that floats off and opens doors. The printed text rules out
-    attacking with it, which leaves nothing a fight can see."""
+    """The object lifts off and floats in a square beside you.
+
+    **This row was `out_of_combat=True` and Camille took the flag off.**
+    Asked on `#1597`, 2026-11-25:
+
+    > *"The item in particular looks like the at will has combat
+    > applications. It's possible to need to use thievery to disarm a trap
+    > mid combat."*
+
+    Which is the card's own case rather than an extension of it -- Thievery
+    is one of the three things the printed Effect names you can do through
+    the object.
+
+    **The old docstring's reasoning was sound and its premise was not.** It
+    read *"the printed text rules out attacking with it, which leaves
+    nothing a fight can see"*, and the second clause was the mistake: the
+    object itself is a thing on the board with a square, so placing it is
+    visible whether or not it can attack. What was missing was a way for a
+    row to put one down, and `#1594` measured that `content.terrain.put`
+    already does -- mid-fight, with defences, correctly subtracted from
+    `query.combatants`. The sibling note on `i2393p1` had found the same
+    thing the same day.
+
+    `solid=False` is *"the gauntlet does not occupy its square"*, which is
+    the one printed line that would otherwise be wrong by default -- an
+    object placed solid blocks the square it floats in, and the card says
+    it does not. `Size.TINY` gives it the page-65 defences for its size
+    rather than a hand-written number.
+
+    **The return is an effect, which buys three printed lines at once.**
+    The placement is wrapped in an `effects.apply` whose `on_end` despawns
+    the object, so it goes away when the encounter does; `c.endable` gives
+    *"if the gauntlet is adjacent to you, you can return it to your hand as
+    a minor action"* -- a minor, gated on the adjacency the card asks for;
+    and a `Dropped` watch gives *"if you drop below 1 hit point ... the
+    floating gauntlet returns to your hand"*.
+
+    **Two clauses are dropped and one is not a gap at all.** Acting through
+    the object -- the Thievery clause -- wants a check whose origin is
+    somewhere other than where the character stands, and nothing in this
+    engine offers that; moving it with a move action wants an action
+    offered over a thing that is not a creature. Both are named. The third,
+    *"or remove the gauntlet that you're wearing"*, has **no moment**:
+    checked 2026-11-25, there is no unequip, doff or stow action kind in
+    `actions.py`, so nothing in a fight takes a worn item off. That is a
+    circumstance rather than a missing row, which is the call `p2472`'s
+    note already makes for its own language clause, and it takes no marker.
+
+    At-will and `action=MINOR`, both printed, so the ruling in
+    `content/CLAUDE.md` about an at-will being up before the fight starts
+    applies to it for free.
+    """
+    if _floating(c.world, c.me) is not None:
+        # One object off the hand at a time: the card says "one of the
+        # gauntlets", and a second placement would give `_floating` two
+        # answers and `i3221p2` an arbitrary one.
+        return
+    beside = sorted(
+        sq for here in _squares_of(c.world, c.me)
+        for sq in _neighbours(here)
+        if c.world.grid.inside(sq)
+    )
+    # **A free square is preferred and an occupied one is still legal**, and
+    # the card does not settle this -- it says only "a square adjacent to
+    # you", and since the object does not occupy its square it can float in
+    # somebody else's. What forces the preference is `i3221p2`: the wearer
+    # teleports *into* that square, and a creature cannot share one, so an
+    # object parked on a foe makes the daily unusable. Found by the driver
+    # rule, where both its swap arms failed on one cause -- the object had
+    # been placed on an occupant and the wearer then could not step in.
+    #
+    # The fallback keeps the at-will working when every neighbour is taken:
+    # the object still floats, and only the daily is unavailable, which is
+    # the printed behaviour rather than a refusal.
+    spots = [sq for sq in beside if c.world.grid.occupant(sq) is None] or beside
+    if not spots:
+        return
+    spot = c.choose(spots, f"{c.ref}: the square it floats in")
+    if spot is None:
+        return
+    thing = _put_object(
+        c.world, spot, kind="object", by=c.me, ref=_FLOATING,
+        size=Size.TINY, solid=False,
+    )
+
+    def recall() -> None:
+        c.world.grid.lift(thing)
+        c.world.despawn(thing)
+
+    held = c.world.effects.apply(
+        c.me, c.me, When.ENCOUNTER, label=f"{c.ref} floating",
+        on_end=[recall], by=c.ref,
+    )
+    c.endable(
+        held, MINOR,
+        when=lambda world, who: (
+            (found := _floating(world, who)) is not None
+            and query.adjacent(world, who, found)
+        ),
+    )
+
+    def returns(ev: Dropped) -> None:
+        if ev.actor != c.me or held is None:
+            return
+        c.world.effects.end(held, "returned")
+
+    c.watch(Dropped, returns, until=When.ENCOUNTER)
 
 
 @power("i3221p2", level=9, cls=ITEM, usage=DAILY, action=MOVE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       todo=("c.floating_object()",))
+       requires=lambda world, eid: _floating(world, eid) is not None,
+       requires_text="one of the objects must be floating")
 def i3221p2(c: Cast) -> None:
     """Swapping places with the floating gauntlet needs the gauntlet to be
     somewhere.
@@ -2150,7 +2287,37 @@ def i3221p2(c: Cast) -> None:
     make `todo.py` report this ready the day scenery can be placed, with
     half the work still to do -- the "twelve rows reported ready when a
     third of it landed" failure. The Requirement is the tell: this row is
-    about a state the row beside it has no way to create."""
+    about a state the row beside it has no way to create.
+
+    **The row beside it can create it now, so this one is written.**
+    `i3221p1` places the object through `content.terrain.put` -- see its
+    docstring, and `#1594` for the measurement that a row may call it
+    mid-fight. The Requirement is therefore a real `requires=` reading the
+    board rather than prose, which is what `requires_text` makes visible to
+    the board knobs.
+
+    **`c.swap(kind="teleport")`, and the `kind` is the whole of what this
+    row needed from the engine.** `c.swap` lifts both before either lands,
+    which is the "swapping positions" half and was already right; it
+    hard-coded `kind="swap"`, so a printed teleport went down as a walk and
+    would have been answered by anything watching for one. The parameter
+    defaults to `"swap"`, so the 80 existing call sites are untouched.
+
+    Not `c.teleport` plus a second move: a teleport that lands first and
+    then moves the object has the character standing in an occupied square
+    in between, and the card is one exchange."""
+    thing = _floating(c.world, c.me)
+    if thing is None:
+        return
+    c.swap(thing, kind="teleport")
+    # **Lifted again, because the swap puts it back in the index.**
+    # `terrain.put(solid=False)` sets `Position.square` *without* indexing
+    # `grid.occupants` -- that is the whole of "the gauntlet does not
+    # occupy its square" -- and `c.swap` routes through `movement.step`,
+    # which places. So a swap would silently make the object solid and the
+    # printed line false from the second use onward. `Grid.place` only
+    # adds, so lifting is the inverse and the position survives it.
+    c.world.grid.lift(thing)
 
 
 # -- level 10 ---------------------------------------------------------------

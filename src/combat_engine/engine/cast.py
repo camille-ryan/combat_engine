@@ -5909,8 +5909,19 @@ class Cast:
         finally:
             self.world.provocation = prior
 
-    def swap(self, other: int, *, who: int | None = None) -> bool:
+    def swap(
+        self, other: int, *, who: int | None = None, kind: str = "swap",
+    ) -> bool:
         """Two creatures change places. Either both move or neither does.
+
+        **`kind` names which sort of move it is, and a printed teleport
+        needs it.** *"You teleport, swapping positions with ..."* --
+        `i3221p2` -- and a swap that goes down as a walk is read as one
+        everywhere it matters: a kind-wide extension finds it, an
+        opportunity attack answers it, and `c.ignores_difficult` does not
+        apply. Defaults to `"swap"`, and **80 content call sites pass no
+        `kind`** -- counted, none of them passes one -- so every existing
+        swap still goes down as a swap.
 
         Routed through `movement.step` rather than `place`, which is setup
         only and announces nothing. Done the quiet way, two creatures
@@ -5932,8 +5943,8 @@ class Cast:
         # square as occupied and neither moves.
         self.world.grid.lift(a)
         self.world.grid.lift(other)
-        step(self.world, a, there, kind="swap", mode="walk")
-        step(self.world, other, here, kind="swap", mode="walk")
+        step(self.world, a, there, kind=kind, mode="walk")
+        step(self.world, other, here, kind=kind, mode="walk")
         return True
 
     def basic(
