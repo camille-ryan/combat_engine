@@ -1143,8 +1143,7 @@ def i3470x1(c: Cast) -> None:
 
 
 @power("i3470p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=CloseBurst(3), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("query.can_hear(through a zone)",))
+       reach=CloseBurst(3), target=NO_TARGET, keywords=[Keyword.ZONE])
 def i3470p1(c: Cast) -> None:
     """*"The burst creates a zone that lasts until the end of your next
     turn and moves with you. No sound can be made in the zone, and no
@@ -1170,12 +1169,28 @@ def i3470p1(c: Cast) -> None:
     in its own comment, and a burst laid as fixed squares would stay
     behind the first time the wearer stepped.
 
-    **Dropped: "or through it."** That is a line, and `query.can_hear` is
-    deliberately **not** a line-of-effect test -- its docstring says
-    sound goes round corners and that using one would make a shout
-    through a doorway fail. So the third clause cannot be written without
-    contradicting the reader's own design, and the marker names that
-    rather than a verb. #1460.
+    **"Or through it" is written now, and the note that stood here had the
+    argument one step wrong.** It read: *"that is a line, and
+    `query.can_hear` is deliberately not a line-of-effect test -- sound
+    goes round corners -- so the third clause cannot be written without
+    contradicting the reader's own design."*
+
+    The premise is right and the conclusion does not follow from it.
+    "Sound goes round corners" is about **walls**, which is why a shout
+    through a doorway must not fail and why `line_of_effect` is not
+    consulted for hearing. This card prints a *sound blocker* -- so it is
+    an exception to that default, not a contradiction of it, and the root
+    rule is that a printed row wins over a general model.
+
+    What makes both true at once is that the test is **permissive**:
+    `Grid.unobstructed` asks whether *any* corner-to-corner line misses
+    the zone, so a burst 3 that sound can route around does not silence,
+    and only a zone standing between the two on every path does. Walls
+    are never in its obstacle set here. So sound still goes round the
+    zone exactly as it goes round a corner; what it cannot do is cross
+    it.
+
+    Three clauses, three written, no marker. #1460.
     """
     # `sustain=MINOR` on the zone and not in the header: `power()` takes
     # no such argument, and the printed *"Sustain Minor"* is a property of

@@ -138236,6 +138236,142 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def a_silencing_zone_blocks_sound_through_it_but_not_around_it(
+    out: Result,
+) -> None:
+    """*"No sound can be made in the zone, and no noise from outside the
+    zone can be heard in it or through it."* -- `i3470p1`, all three
+    clauses.
+
+    **The third one carried a marker saying it could not be written**, and
+    the argument was one step wrong rather than wrong throughout. It ran:
+    `query.can_hear` is deliberately not a line-of-effect test, because
+    sound goes round corners and a shout through a doorway must not fail,
+    so a line crossing the zone has nothing to test against without
+    contradicting that.
+
+    The premise is right. What does not follow is the conclusion: "sound
+    goes round corners" is a claim about **walls**, and this card prints a
+    sound blocker outright, so the zone is an *exception* to the default
+    rather than a contradiction of it -- which is the root rule that a
+    printed row beats a general model.
+
+    What keeps both true at once is permissiveness, and it is what the
+    `round it` arm below is really testing. `Grid.unobstructed` asks
+    whether **any** corner-to-corner line misses the obstacle set, so the
+    zone silences only when it stands between the two on every path. The
+    `wall` arm is the other half: walls are never in that obstacle set
+    here, so the behaviour the old note was protecting is still protected,
+    and this rule would catch a future change that reached for
+    `line_of_effect` instead.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW = "i3470p1"
+    world, me, _ev = _board(ROW, 1)
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "the row carries no marker -- all three printed clauses, where"
+             " the third was marked unwritable",
+             f"{REGISTRY[ROW].unfinished}")
+
+    # The wearer carries the aura, so the zone is centred on it.
+    world.need(me, Position).square = (10, 10)
+    c = Cast(world=world, me=me, ref=ROW)
+    REGISTRY[ROW].body(c)
+
+    silencing = [z for _e, z in world.zones.all() if z.silences]
+    out.that(len(silencing) == 1,
+             "the row lays exactly one SILENCING zone -- the premise, and"
+             " `Zone.silences` is the field the reader consults",
+             f"{len(silencing)}")
+    if not silencing:
+        return
+    where = silencing[0].squares
+
+    far_south = world.spawn(Position(square=(10, 5)))
+    far_north = world.spawn(Position(square=(10, 15)))
+    beside = world.spawn(Position(square=(14, 5)))
+    inside = world.spawn(Position(square=(10, 10)))
+    # **A pair whose sightline GRAZES the zone**, found by enumerating the
+    # board against the zone's own squares rather than guessed: some
+    # corner-to-corner lines between these two clip the zone and at least
+    # one misses it. This is the pair that tells `any` from `all`, and
+    # without it the permissiveness arm below was vacuous -- forcing
+    # `unobstructed` to demand every line be clear reddened **nothing**,
+    # because the same-side pair has the zone entirely off its path.
+    grazing = world.spawn(Position(square=(0, 0)))
+    far_corner = world.spawn(Position(square=(7, 14)))
+
+    out.that(not (query.squares(world, far_south) & where),
+             "the southern creature stands OUTSIDE the zone -- staging, and"
+             " the through-it arm means nothing if it is inside",
+             f"{sorted(query.squares(world, far_south))}")
+    out.that(not (query.squares(world, far_north) & where),
+             "and so does the northern one",
+             f"{sorted(query.squares(world, far_north))}")
+    out.that(bool(query.squares(world, inside) & where),
+             "and the creature at the centre is INSIDE it -- staging for"
+             " the two membership clauses",
+             f"{sorted(query.squares(world, inside))}")
+
+    # ---- the clause that was marked unwritable -------------------------
+    out.that(not query.can_hear(world, far_south, far_north),
+             "a creature cannot hear one on the far side -- *'or through"
+             " it'*, the clause whose marker said it could not be written"
+             " without contradicting the reader's design",
+             "heard" if query.can_hear(world, far_south, far_north) else "silent")
+
+    # ---- and the permissiveness that makes it honest -------------------
+    out.that(query.can_hear(world, far_south, beside),
+             "but two creatures on the SAME side still hear each other --"
+             " the zone is not between them at all. Without this the test"
+             " would read as 'any silencing zone silences the board'",
+             "heard" if query.can_hear(world, far_south, beside) else "silent")
+    out.that(query.can_hear(world, grazing, far_corner),
+             "and a pair whose sightline GRAZES the zone still hears --"
+             " some of their corner-to-corner lines clip it and one"
+             " misses, so sound routes round it exactly as it routes round"
+             " a corner. This is the arm that tells `any` from `all`:"
+             " making `unobstructed` demand every line be clear reds here"
+             " and nowhere else",
+             "heard" if query.can_hear(world, grazing, far_corner) else "silent")
+
+    # ---- the two clauses that already worked ---------------------------
+    out.that(not query.can_hear(world, inside, far_north),
+             "a listener inside the zone hears nothing from outside --"
+             " *'no noise from outside the zone can be heard in it'*",
+             "heard" if query.can_hear(world, inside, far_north) else "silent")
+    out.that(not query.can_hear(world, far_north, inside),
+             "and a speaker inside it is unheard outside -- *'no sound can"
+             " be made in the zone'*, the same membership test from the"
+             " other side",
+             "heard" if query.can_hear(world, far_north, inside) else "silent")
+
+    # ---- walls still do not block sound --------------------------------
+    quiet, _who, _e = _board("m145a0", 2)
+    ear = quiet.spawn(Position(square=(4, 4)))
+    mouth = quiet.spawn(Position(square=(8, 4)))
+    out.that(query.can_hear(quiet, ear, mouth),
+             "on a board with no silencing zone the two hear each other --"
+             " the baseline",
+             "heard" if query.can_hear(quiet, ear, mouth) else "silent")
+    quiet.grid.blocking.update({(6, y) for y in range(0, 12)})
+    out.that(query.can_hear(quiet, ear, mouth),
+             "and a solid WALL between them does NOT block hearing -- the"
+             " design the old note was protecting, and the thing a future"
+             " change reaching for `line_of_effect` here would break",
+             "heard" if query.can_hear(quiet, ear, mouth) else "silent")
+    out.that(not quiet.grid.line_of_effect((4, 4), (8, 4)),
+             "while that same wall DOES block line of effect -- so the two"
+             " readers genuinely disagree, which is the whole reason"
+             " `unobstructed` takes its obstacles as an argument",
+             f"{quiet.grid.line_of_effect((4, 4), (8, 4))}")
+
+
 def a_floating_object_is_placed_and_swapped_with_but_never_occupies(
     out: Result,
 ) -> None:
@@ -142442,6 +142578,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "silencing_zone": (
+        a_silencing_zone_blocks_sound_through_it_but_not_around_it,
+        "i3470p1 silences sound THROUGH its zone and not around it, the"
+        " clause a marker said could not be written (#1460)",
     ),
     "floating_object": (
         a_floating_object_is_placed_and_swapped_with_but_never_occupies,

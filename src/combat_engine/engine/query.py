@@ -4933,11 +4933,28 @@ def can_hear(world: World, listener: int, speaker: int) -> bool:
     # nobody can hear and a listener who can hear nobody are the same
     # answer.
     #
-    # **"Or through it" is NOT written**, and that is a design decision
-    # rather than an omission: this function is deliberately not a
-    # line-of-effect test -- the paragraph above says sound goes round
-    # corners -- so a line crossing the zone has nothing to be tested
-    # against without contradicting it. `i3470p1` carries the marker.
+    # **"Or through it" IS written now, and the argument against it was
+    # wrong in one step.** This comment used to read: *"that is a design
+    # decision rather than an omission: this function is deliberately not
+    # a line-of-effect test -- sound goes round corners -- so a line
+    # crossing the zone has nothing to be tested against without
+    # contradicting it."*
+    #
+    # The step that does not follow is the last one. "Sound goes round
+    # corners" is a claim about **walls**, which is why `line_of_effect`
+    # is not consulted here and why a shout through a doorway must not
+    # fail. It says nothing about a region whose printed text is *"no
+    # noise from outside the zone can be heard in it or through it"* --
+    # that card states a sound blocker outright, and the root rule is
+    # that a printed row wins over a general model. The zone is an
+    # **exception** to the default, not a contradiction of it.
+    #
+    # And the implementation keeps both true at once, which is what
+    # settles it. `Grid.unobstructed` is permissive -- any clear
+    # corner-to-corner line is enough -- so the zone silences only when
+    # it lies between the two on **every** path. Sound still goes round
+    # the zone exactly as it goes round a corner; what it cannot do is
+    # pass through. Walls are never in the obstacle set here.
     #
     # Skipped when neither creature is in a zone at all, which is every
     # board that never makes one. #1460.
@@ -4951,6 +4968,17 @@ def can_hear(world: World, listener: int, speaker: int) -> bool:
         # live geometry is the only safe source.
         where = zone.squares
         if squares(world, listener) & where or squares(world, speaker) & where:
+            return False
+        # *"or through it"*. Asked of every square-pair because a Large
+        # creature occupies several and a single pair would answer for
+        # one corner of it: sound gets through if **any** pair has a line
+        # the zone misses, which is the same permissiveness
+        # `unobstructed` applies within a pair.
+        if not any(
+            world.grid.unobstructed(here, there, where)
+            for here in squares(world, listener)
+            for there in squares(world, speaker)
+        ):
             return False
     mine = world.get(speaker, Mods)
     if mine is not None and mine.items and mine.total("cannot_speak") > 0:

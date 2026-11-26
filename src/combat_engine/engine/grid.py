@@ -452,20 +452,45 @@ class Grid:
 
     # -- line of effect ----------------------------------------------------
 
+    def unobstructed(
+        self, src: Square, dst: Square, obstacles: frozenset[Square] | set[Square]
+    ) -> bool:
+        """At least one corner-to-corner line from `src` to `dst` misses them all.
+
+        The geometry `line_of_effect` has always used, with the obstacle
+        set handed in rather than read off `self.blocking`. Pulled out
+        because a second caller wants the same question asked of
+        **different** obstacles: `query.can_hear` implements `i3470p1`'s
+        printed *"or through it"* against a silencing zone's squares, and
+        it must not consult `blocking` -- walls do not stop sound, which
+        is the whole reason that reader is not a line-of-effect test.
+
+        Permissive on purpose, and that is what makes it the right shape
+        for sound: **any** clear line is enough, so an obstacle blocks
+        only when it stands between the two on every path. A silence zone
+        that sound can route around therefore does not silence, which
+        agrees with `can_hear`'s own "sound goes round corners" rather
+        than contradicting it.
+
+        The endpoints are excluded, as they always were -- a creature
+        standing in an obstructed square can still be reached from it.
+        """
+        if src == dst:
+            return True
+        between = set(obstacles) - {src, dst}
+        return any(
+            not _stopped(_trace(a, b), between)
+            for a in _corners(src)
+            for b in _corners(dst)
+        )
+
     def line_of_effect(self, src: Square, dst: Square) -> bool:
         """True when at least one corner-to-corner line is unobstructed.
 
         Creatures never block line of effect in 4e -- they grant cover
         instead -- so only terrain is consulted here.
         """
-        if src == dst:
-            return True
-        obstacles = self.blocking - {src, dst}
-        return any(
-            not _stopped(_trace(a, b), obstacles)
-            for a in _corners(src)
-            for b in _corners(dst)
-        )
+        return self.unobstructed(src, dst, self.blocking)
 
     def cover(
         self,
