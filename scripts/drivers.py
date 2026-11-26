@@ -138302,6 +138302,150 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def an_uncommanded_summon_turns_on_its_summoner(out: Result) -> None:
+    """*"Each round, if you do not give the silt elemental any commands, you
+    must make a saving throw at the end of your turn; if you fail the
+    saving throw, this effect ends, and you replace the summoned silt
+    elemental with a m5584 creature, which is hostile."* -- `i2714p1`.
+
+    **Its note said the change wanted measuring before it was made, and
+    the measurement is what unblocked it.** The note:
+
+    > *"Adding a `Companion` here was not done blind... `_uncommanded`
+    > also pulls a companion towards its owner and runs a block's printed
+    > Instinctive Effect, neither of which this card prints."*
+
+    Both are gated, and by facts rather than by hope:
+
+    * `turns._uncommanded` pulls only when `mine.kind == "beast"` -- the
+      beast companion's printed rule -- so `kind="summon"` keeps it off;
+    * the other half runs `Cast.instinctive`, which reads a block's
+      printed Instinctive Effect, and `x10_18` prints none, so it answers
+      False and nothing happens.
+
+    So a `Companion` is safe here, and it is the only thing that could
+    make *"if you do not give it any commands"* answerable:
+    `Companion.commanded` is the record and `Cast.command` -- the verb the
+    printed *"you spend actions to command it mentally"* goes through --
+    is what stamps it.
+
+    `c.transform(side=)` was built for this sentence and says so in its
+    own docstring. The entity id survives a transform, which is why the
+    hostile creature is the same creature rather than a kill and a fresh
+    spawn.
+
+    The arms are paired: **commanded** means no save at all, and
+    **uncommanded** means a save whose failure flips the creature. Either
+    alone passes for a row that always saves or never does.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Ident
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnEnd
+    from combat_engine.engine.types import Team
+
+    ROW = "i2714p1"
+    world, me, _ev = _board(ROW, 1)
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "the row carries no marker, where it was"
+             " `dropped=('components.Companion(on a spawn_associate"
+             " summon)',)`",
+             f"{REGISTRY[ROW].unfinished}")
+
+    c = Cast(world=world, me=me, ref=ROW)
+    REGISTRY[ROW].body(c)
+
+    # **Matched on `Companion.ref`, not just on the owner.** The board's
+    # character already owns one -- filtering by owner alone found two and
+    # this arm failed while the row was correct, which is `audit.board`
+    # pre-setting the thing being measured.
+    pets = [e for e in sorted(world.having(Companion))
+            if (m := world.get(e, Companion)) is not None
+            and m.owner == me and m.ref == ROW]
+    out.that(len(pets) == 1,
+             "the summon carries a `Companion` of THIS row's -- the record"
+             " that makes 'if you do not give it any commands' answerable"
+             " at all, and `spawn_associate` lays none",
+             f"{len(pets)}")
+    if len(pets) != 1:
+        return
+    pet = pets[0]
+    mine = world.need(pet, Companion)
+
+    out.that(mine.kind == "summon",
+             "and its kind is NOT 'beast' -- which is what keeps"
+             " `turns._uncommanded` from walking it toward its owner every"
+             " round, a rule this card does not print",
+             f"{mine.kind}")
+    out.that(not Cast(world=world, me=me, ref=ROW).instinctive(pet),
+             "and the block prints no Instinctive Effect, which is the"
+             " other half of `_uncommanded` and the other reason this"
+             " row's note gave for not adding a `Companion`",
+             "none")
+
+    was = str(getattr(world.get(pet, Ident), "ref", ""))
+    out.that(bool(was) and was != "m5584",
+             "premise: it starts as the summoned creature rather than the"
+             " hostile replacement",
+             f"{was}")
+
+    # ---- commanded: nothing is owed, so nothing happens ----------------
+    # **Tested by CONSEQUENCE on its own board, not by counting throws.**
+    # Two earlier drafts failed here while the row was correct. Counting
+    # `SavingThrow` events caught the board's ordinary save-ends
+    # machinery (`Effects._on_turn_end`, registered `late=True`); and
+    # taking the difference between a commanded and an uncommanded round
+    # on **one** board was confounded by order -- the board's own
+    # save-ends effects ended on the first `TurnEnd`, so the second emit
+    # had none of its own and the two counts coincided at 1.
+    #
+    # A save penalty large enough that the roll cannot matter turns both
+    # arms into statements about the printed condition instead of about
+    # the dice: commanded means no save is owed, so the creature survives
+    # a guaranteed failure.
+    mine.commanded = world.round
+    c.penalty("save", 50, on=me, until=When.ENCOUNTER)
+    world.bus.emit(TurnEnd(actor=me, round=world.round))
+    out.that(str(getattr(world.get(pet, Ident), "ref", "")) == was,
+             "a round in which it WAS commanded leaves the creature"
+             " untouched even with a save it cannot pass -- no throw is"
+             " owed, which is the printed condition and the control that"
+             " stops the clause firing every round regardless",
+             f"{getattr(world.get(pet, Ident), 'ref', '')}")
+
+    # ---- a FAILED save flips the creature -------------------------------
+    world2, me2, _e2 = _board(ROW, 2)
+    c2 = Cast(world=world2, me=me2, ref=ROW)
+    REGISTRY[ROW].body(c2)
+    kin = [e for e in sorted(world2.having(Companion))
+           if (m := world2.get(e, Companion)) is not None
+           and m.owner == me2 and m.ref == ROW]
+    out.that(len(kin) == 1, "premise: a second board summoned one too",
+             f"{len(kin)}")
+    if len(kin) != 1:
+        return
+    pet2 = kin[0]
+    world2.need(pet2, Companion).commanded = -1
+    # A penalty large enough that the roll cannot matter, so the arm is
+    # about the consequence rather than about the dice.
+    c2.penalty("save", 50, on=me2, until=When.ENCOUNTER)
+    world2.bus.emit(TurnEnd(actor=me2, round=world2.round))
+    now = str(getattr(world2.get(pet2, Ident), "ref", ""))
+    out.that(now == "m5584",
+             "a FAILED save replaces it with the hostile creature --"
+             " *'this effect ends, and you replace the summoned silt"
+             " elemental with a m5584 creature'*",
+             f"{now}")
+    out.that(query.team(world2, pet2) is Team.ENEMY,
+             "and it is HOSTILE, which `c.transform(side=)` is for -- the"
+             " entity id survives, so anything pointing at the creature"
+             " now points at an enemy",
+             f"{query.team(world2, pet2)}")
+
+
 def two_flurry_uses_need_two_different_attacks(out: Result) -> None:
     """*"You can use your Flurry of Blows power an additional time during
     your turn, but the two uses of that power must be triggered by two
@@ -143696,6 +143840,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "uncommanded_summon": (
+        an_uncommanded_summon_turns_on_its_summoner,
+        "i2714p1's summon owes its summoner a save each round it goes"
+        " uncommanded, and a failure turns it hostile (#1455)",
     ),
     "flurry_distinct": (
         two_flurry_uses_need_two_different_attacks,

@@ -2503,7 +2503,7 @@ def i2408p1(c: Cast) -> None:
 
 @power("i2714p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(5), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       dropped=("components.Companion(on a spawn_associate summon)",))
+)
 def i2714p1(c: Cast) -> None:
     """**Re-pointed off `defect=`, which was false about the source.** The
     old marker read *"the card defers the statistics and the entry prints
@@ -2569,7 +2569,9 @@ def i2714p1(c: Cast) -> None:
     callers rather than being made for one row.
     """
     from combat_engine.content.loader import spawn_associate
+    from combat_engine.engine.components import Companion as Commanded
     from combat_engine.engine.components import Summon as SummonedFrom
+    from combat_engine.engine.types import Team
 
     me = c.me
     here = query.squares(c.world, me)
@@ -2582,8 +2584,47 @@ def i2714p1(c: Cast) -> None:
         return
     beast = spawn_associate(c.world, "x10_18", free[0], of=me)
     c.world.add(beast, SummonedFrom(by=me, ref=c.ref))
+    # **A `Companion` so "if you do not give it any commands" is
+    # answerable.** `spawn_associate` lays a `Summon` and no `Companion`,
+    # and `Companion.commanded` is the only record of a command --
+    # `Cast.command` stamps it, which is the verb the printed *"you spend
+    # actions to command it mentally"* goes through.
+    #
+    # **`kind="summon"`, and the word is load-bearing.** `turns._uncommanded`
+    # pulls an uncommanded companion toward its owner only when
+    # `mine.kind == "beast"`, which is the beast companion's printed rule
+    # and not this card's -- so the word is what keeps that default off.
+    # The other half of that function runs a block's printed Instinctive
+    # Effect, and `x10_18` prints none, so `Cast.instinctive` answers False
+    # and nothing else happens. Both of the reasons this row's note gave
+    # for not adding a `Companion` are gated by those two facts, measured
+    # rather than assumed.
+    c.world.add(beast, Commanded(owner=me, ref=c.ref, kind="summon"))
     c.world.bus.emit(Summoned(actor=me, summon=beast, ref=c.ref))
     c.cast_from(me, on=beast, until=When.ENCOUNTER)
+
+    def unattended(ev: TurnEnd) -> None:
+        """*"Each round, if you do not give the silt elemental any
+        commands, you must make a saving throw at the end of your turn."*
+        """
+        if ev.actor != me:
+            return
+        mine = c.world.get(beast, Commanded)
+        if mine is None or mine.commanded == c.world.round:
+            return
+        # The save is the **character's**, which the card says outright --
+        # "you must make a saving throw" -- and it is bare rather than
+        # against an effect: there is no save-ends hold to shake off, the
+        # roll is the card's own condition.
+        if c.save(on=me, bare=True):
+            return
+        # *"This effect ends, and you replace the summoned creature with a
+        # hostile one."* `c.transform(side=)` is that in one call and its
+        # own docstring names this row: the entity id survives, so every
+        # relation and effect pointing at the creature follows it over.
+        c.transform("m5584", on=beast, side=Team.ENEMY)
+
+    c.watch(TurnEnd, unattended, until=When.ENCOUNTER, label=c.ref)
 
 
 @power("i2966x1", level=5, cls=ITEM, action=ActionType.NONE,
