@@ -2232,8 +2232,13 @@ _riders("f1304", {}, implemented_in=("p87", "p653", "p992", "p4541"))
 # been a row green on half a card. The symbol names that read, by the ref,
 # the way `p13853.dice_for()` does, and `races/powers_c.py` is one line's
 # work: the `inside` set wants the matching zone's `squares`.
-_riders("f1305", {}, implemented_in=("p620", "p992", "p2248"),
-        dropped=("p2473.live_area()",))
+# **The read is fixed, so the marker is gone.** `p2473.refresh` now takes
+# the matching zone's current `squares` from the same walk that collects
+# `exempt`, so a cloud this card moves blinds its new footprint and stops
+# blinding the old one. It was a bug in that row as much as a block on this
+# one: `query.cover_between` reads `Zone.squares` for the sight half, so the
+# two halves of the printed cloud disagreed about where it was.
+_riders("f1305", {}, implemented_in=("p620", "p992", "p2248"))
 
 def _surprise_round(c: Cast) -> bool:
     """Is this the surprise round?

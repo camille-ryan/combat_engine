@@ -647,11 +647,26 @@ def p2473(c: Cast) -> None:
         # keeps one answer to "is this creature immune to the cloud" --
         # `query.cover_between` already reads the same field for the
         # sight-blocking half.
+        # **The zone's CURRENT squares, not the ones captured when it was
+        # cast**, which is `f1305`'s `p2473.live_area()` and was a real
+        # bug rather than only a blocked clause. `area` is a snapshot from
+        # the moment of casting; `c.move_zone` translates a zone keeping
+        # its shape, so a cloud that had moved went on blinding whoever
+        # stood in the **old** footprint while `query.cover_between` --
+        # which reads `Zone.squares` -- blocked sight from the new one.
+        # Two halves of one card disagreeing about where the cloud is.
+        #
+        # Read from the same walk that collects `exempt`, so there is one
+        # pass and one answer to "which zone is mine". Falls back to
+        # `area` when no matching zone is found, which is the state
+        # between `c.zone` returning and anything moving it.
         spared = {c.me}
+        live = set(area)
         for _zid, zone in c.world.zones.all():
             if zone.label == c.ref and zone.owner == c.me:
                 spared |= set(zone.exempt)
-        inside = {w for w in c.in_squares(area) if w not in spared}
+                live = set(zone.squares)
+        inside = {w for w in c.in_squares(live) if w not in spared}
         for who in inside - set(held):
             blind = c.blinded(on=who, until=When.EONT)
             if blind is not None:

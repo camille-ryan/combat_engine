@@ -25610,21 +25610,28 @@ def f1305_exempts_a_designated_ally_from_its_own_cloud(out: Result) -> None:
         f"f1305 carries no marker for the exemption ({owed})",
     )
     out.that(
-        owed == ("p2473.live_area()",),
-        # **Re-pointed this wave, and this line pinned the old spelling.**
-        # It read `any("move_zone" in sym ...)`, which was true while the
-        # marker said `c.move_zone(with_me=)`. That verb was never the
-        # gap: `c.move_zone(zid, n, to=)` translates a zone keeping its
-        # shape. What blocks the clause is one layer down -- `p2473`
-        # captures `area = c.area()` at cast time and its blinding closure
-        # re-reads `c.in_squares(area)`, so a cloud moved by this clause
-        # would blind the squares it LEFT. Hence `p2473.live_area()`.
+        owed == (),
+        # **The clause landed, so this arm is inverted rather than
+        # deleted.** It asserted `owed == ("p2473.live_area()",)` -- an
+        # exact tuple, deliberately, after an earlier version of the same
+        # line survived a re-point by testing a substring. The exactness
+        # worked: writing the clause made it red immediately, which is the
+        # second rule in one sweep caught by un-marking a row and the
+        # reason `content/CLAUDE.md` says that needs the full suite.
         #
-        # An exact tuple rather than a substring test, for the reason
-        # `retarget_split` records: a substring passes for any symbol that
-        # merely mentions the verb, which is how this line survived a
-        # re-point that changed what the row is waiting for.
-        f"and still names its other clause, which is untouched ({owed})",
+        # What the marker named is now true of the row: `p2473.refresh`
+        # takes the matching zone's current `squares` from the same walk
+        # that collects `Zone.exempt`, so a cloud this card moves blinds
+        # its new footprint and stops blinding the one it left. The
+        # history is kept because it is the useful part -- the marker
+        # before it read `c.move_zone(with_me=)`, naming a verb that was
+        # never the gap, and the real block was a cast-time snapshot one
+        # layer down in another row.
+        #
+        # Kept as an arm because "this card owes nothing" is the thing a
+        # later change could quietly undo. `drivers.cloud_follows` proves
+        # the behaviour itself.
+        f"and owes nothing at all now, where it named one clause ({owed})",
     )
 
 
@@ -138271,6 +138278,129 @@ def a_grabber_can_let_go_as_a_free_action(out: Result) -> None:
              f"{[a.targets for a in offers()]}")
 
 
+def a_cloud_that_moves_blinds_its_new_footprint(out: Result) -> None:
+    """`f1305`'s `p2473.live_area()`, which was a **bug** in `p2473` as much
+    as a block on the feat.
+
+    The feat's note had the diagnosis exactly right and then called it one
+    line's work, which it was:
+
+    > *"that row's blinding watch re-reads occupancy against the `area`
+    > tuple captured when the zone was cast, not against the zone's current
+    > squares. So a cloud this clause moved would block sight from its new
+    > footprint -- `Zone.squares` is what `query.cover_between` reads -- and
+    > go on blinding whoever stands in the **old** one."*
+
+    So the two halves of one printed cloud disagreed about where it was:
+    sight was blocked from the new squares and blindness was applied in the
+    old ones. Writing `f1305`'s clause against that row would have been
+    green on half a card, which is why the marker named the read rather
+    than a verb.
+
+    `refresh` now takes the matching zone's current `squares` from the same
+    walk that already collects `Zone.exempt`, so there is one pass and one
+    answer to "which zone is mine".
+
+    The arms are paired on purpose: **stops** blinding the old footprint
+    and **starts** blinding the new one. Either alone passes for a row that
+    simply blinds everybody or nobody.
+    """
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import MoveEnd
+    from combat_engine.engine.types import Condition
+    from combat_engine.engine.zones import Zone
+
+    FEAT, ROW = "f1305", "p2473"
+
+    # **The board is built before the registry is read**, and that is not
+    # cosmetic: `f1305` is declared by a `_riders(...)` helper in
+    # `feats/general_h.py`, and that module is not imported until
+    # something pulls the content package in. Reading `REGISTRY[FEAT]`
+    # first raises `KeyError` on a single-rule run and passes inside a
+    # full suite, where an earlier rule has already built a board -- which
+    # is the order-dependence `#1037` is about, arriving through the
+    # import graph instead of a module-level flag.
+    world, me, _ev = _board(ROW, 1)
+
+    out.that(not REGISTRY[FEAT].unfinished,
+             "the feat carries no marker -- it was"
+             " `dropped=('p2473.live_area()',)`, and the gap was a read one"
+             " layer down rather than anything the feat itself lacked",
+             f"{REGISTRY[FEAT].unfinished}")
+    out.that(REGISTRY[FEAT].implemented_in == ("p620", "p992", "p2248"),
+             "and it stays a pointer into the three rows that carry its"
+             " clauses",
+             f"{REGISTRY[FEAT].implemented_in}")
+
+    world.need(me, Position).square = (10, 10)
+    c = Cast(world=world, me=me, ref=ROW)
+    REGISTRY[ROW].body(c)
+
+    mine = [
+        (zid, z) for zid, z in world.zones.all()
+        if z.label == ROW and z.owner == me
+    ]
+    out.that(len(mine) == 1,
+             "the row lays one cloud of its own -- the premise, and the"
+             " walk inside `refresh` keys on exactly this",
+             f"{len(mine)}")
+    if len(mine) != 1:
+        return
+    zid, zone = mine[0]
+    was = set(zone.squares)
+
+    # Somebody in the cloud, somebody well clear of it.
+    foes = sorted(query.enemies(world, me))
+    caught, clear = foes[0], foes[1]
+    world.grid.lift(caught)
+    seat = sorted(was)[0]
+    world.need(caught, Position).square = seat
+    world.grid.place(caught, frozenset({seat}))
+    far = (2, 2)
+    world.grid.lift(clear)
+    world.need(clear, Position).square = far
+    world.grid.place(clear, frozenset({far}))
+
+    world.bus.emit(MoveEnd(actor=caught, at=seat))
+    out.that(query.is_(world, caught, Condition.BLINDED),
+             "a creature standing in the cloud is blinded -- *'blinded"
+             " until they exit'*, held per creature rather than swept once",
+             "blinded")
+    out.that(not query.is_(world, clear, Condition.BLINDED),
+             "and one well clear of it is not -- the premise for the move,"
+             " since a row blinding everybody would pass the arms below",
+             "sees")
+    out.that(not query.is_(world, me, Condition.BLINDED),
+             "nor is the caster, who is exempt either way",
+             "sees")
+
+    # ---- move the cloud onto the one who was clear ---------------------
+    moved = c.move_zone(zid, 9, to=far)
+    out.that(moved, "the cloud can be moved at all -- `c.move_zone`"
+             " translates a zone keeping its shape", f"{moved}")
+    now = set(world.get(zid, Zone).squares)
+    out.that(now != was,
+             "and its squares really changed, which is what the old read"
+             " could not see",
+             f"{len(was & now)} of {len(was)} squares shared")
+
+    world.bus.emit(MoveEnd(actor=clear, at=far))
+    out.that(query.is_(world, clear, Condition.BLINDED),
+             "the creature in the cloud's NEW footprint is blinded -- the"
+             " half `query.cover_between` already agreed with, since it"
+             " reads `Zone.squares`",
+             "blinded")
+    out.that(not query.is_(world, caught, Condition.BLINDED),
+             "and the one left standing in the OLD footprint is not -- the"
+             " bug, which would have gone on blinding a square the cloud"
+             " had left. Paired with the arm above because either alone"
+             " passes for a row that blinds everybody or nobody",
+             "sees")
+
+
 def wearing_the_oath_targets_face_grants_advantage(out: Result) -> None:
     """*"If you use your change shape racial power to assume the appearance
     of your p3069 target, you gain combat advantage against that creature
@@ -142947,6 +143077,11 @@ DRIVERS = {
         a_grabber_can_let_go_as_a_free_action,
         "a grabber can let go as a free action, per victim, ending the"
         " hold and not only its relation (#1595)",
+    ),
+    "cloud_follows": (
+        a_cloud_that_moves_blinds_its_new_footprint,
+        "p2473 blinds the cloud's CURRENT squares, not the ones captured"
+        " when it was cast, which was f1305's last clause",
     ),
     "mimic_the_sworn": (
         wearing_the_oath_targets_face_grants_advantage,
